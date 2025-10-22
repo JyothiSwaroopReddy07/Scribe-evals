@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  evaluator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deepscribe-evaluator
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./logs:/app/logs
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEFAULT_LLM_MODEL=${DEFAULT_LLM_MODEL:-gpt-4o-mini}
+      - PYTHONUNBUFFERED=1
+    command: python -m src.pipeline --num-samples 100
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deepscribe-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./results:/app/results:ro
+    command: streamlit run dashboard.py --server.port=8501 --server.address=0.0.0.0
+    depends_on:
+      - evaluator
+
+  notebook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deepscribe-notebook
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+      - ./results:/app/results
+    command: jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+
