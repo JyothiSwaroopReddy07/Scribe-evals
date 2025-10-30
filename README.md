@@ -1,4 +1,4 @@
-# DeepScribe SOAP Note Evaluation Suite
+# Scribe SOAP Note Evaluation Suite
 
 A production-ready evaluation framework for assessing AI-generated clinical SOAP notes using advanced AI interpretability techniques.
 
