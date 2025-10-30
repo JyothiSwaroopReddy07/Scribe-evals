@@ -172,39 +172,39 @@ class PromptTemplates:
         """Prompt for detecting hallucinated facts."""
         system_prompt = """You are a medical documentation expert tasked with identifying hallucinated or unsupported facts in clinical SOAP notes.
 
-Your job is to compare a generated SOAP note against the source transcript and identify any information in the note that is NOT supported by the transcript.
+            Your job is to compare a generated SOAP note against the source transcript and identify any information in the note that is NOT supported by the transcript.
 
-A fact is considered hallucinated if:
-1. It's explicitly stated in the note but not mentioned in the transcript
-2. It contradicts information in the transcript
-3. It makes specific claims (dosages, dates, measurements) not present in the source
+            A fact is considered hallucinated if:
+            1. It's explicitly stated in the note but not mentioned in the transcript
+            2. It contradicts information in the transcript
+            3. It makes specific claims (dosages, dates, measurements) not present in the source
 
-Do NOT flag:
-- Standard medical formatting or SOAP structure
-- Reasonable clinical terminology for described symptoms
-- Normal ranges or standard procedures implied by the context
+            Do NOT flag:
+            - Standard medical formatting or SOAP structure
+            - Reasonable clinical terminology for described symptoms
+            - Normal ranges or standard procedures implied by the context
 
-Respond in JSON format with:
-{
-  "hallucinations": [
-    {
-      "fact": "specific hallucinated statement",
-      "severity": "high/medium/low",
-      "explanation": "why this is unsupported",
-      "location": "which section (S/O/A/P)"
-    }
-  ],
-  "hallucination_score": 0.0-1.0 (0 = many hallucinations, 1 = none),
-  "confidence": 0.0-1.0
-}"""
-        
+            Respond in JSON format with:
+            {
+            "hallucinations": [
+                {
+                "fact": "specific hallucinated statement",
+                "severity": "high/medium/low",
+                "explanation": "why this is unsupported",
+                "location": "which section (S/O/A/P)"
+                }
+            ],
+            "hallucination_score": 0.0-1.0 (0 = many hallucinations, 1 = none),
+            "confidence": 0.0-1.0
+            }"""
+                    
         user_template = """Transcript:
-{transcript}
+            {transcript}
 
-Generated SOAP Note:
-{generated_note}
+            Generated SOAP Note:
+            {generated_note}
 
-Identify any hallucinated or unsupported facts in the note."""
+            Identify any hallucinated or unsupported facts in the note."""
         
         return system_prompt, user_template
     
@@ -213,42 +213,42 @@ Identify any hallucinated or unsupported facts in the note."""
         """Prompt for checking completeness."""
         system_prompt = """You are a medical documentation expert tasked with identifying critical information from patient encounters that may be missing from SOAP notes.
 
-Your job is to review the transcript and identify any clinically significant information that should have been documented but is missing from the generated note.
+            Your job is to review the transcript and identify any clinically significant information that should have been documented but is missing from the generated note.
 
-Focus on:
-1. Key symptoms or complaints mentioned by the patient
-2. Important physical examination findings
-3. Relevant medical history
-4. Diagnoses or clinical impressions
-5. Treatment plans or recommendations
-6. Follow-up instructions
+            Focus on:
+            1. Key symptoms or complaints mentioned by the patient
+            2. Important physical examination findings
+            3. Relevant medical history
+            4. Diagnoses or clinical impressions
+            5. Treatment plans or recommendations
+            6. Follow-up instructions
 
-Do NOT flag:
-- Minor conversational elements
-- Redundant information
-- Information adequately captured in different wording
+            Do NOT flag:
+            - Minor conversational elements
+            - Redundant information
+            - Information adequately captured in different wording
 
-Respond in JSON format with:
-{
-  "missing_items": [
-    {
-      "information": "what's missing",
-      "severity": "critical/high/medium/low",
-      "explanation": "why this is important",
-      "location": "where it should appear (S/O/A/P)"
-    }
-  ],
-  "completeness_score": 0.0-1.0 (0 = major gaps, 1 = complete),
-  "confidence": 0.0-1.0
-}"""
-        
+            Respond in JSON format with:
+            {
+            "missing_items": [
+                {
+                "information": "what's missing",
+                "severity": "critical/high/medium/low",
+                "explanation": "why this is important",
+                "location": "where it should appear (S/O/A/P)"
+                }
+            ],
+            "completeness_score": 0.0-1.0 (0 = major gaps, 1 = complete),
+            "confidence": 0.0-1.0
+            }"""
+                    
         user_template = """Transcript:
-{transcript}
+            {transcript}
 
-Generated SOAP Note:
-{generated_note}
+            Generated SOAP Note:
+            {generated_note}
 
-Identify any critical information from the transcript that is missing from the note."""
+            Identify any critical information from the transcript that is missing from the note."""
         
         return system_prompt, user_template
     
@@ -257,41 +257,41 @@ Identify any critical information from the transcript that is missing from the n
         """Prompt for checking clinical accuracy."""
         system_prompt = """You are a clinical documentation expert tasked with identifying medical inaccuracies or misleading statements in SOAP notes.
 
-Your job is to review the generated note for:
-1. Medically incorrect statements
-2. Inappropriate clinical conclusions
-3. Misrepresentation of symptoms or findings
-4. Incorrect medical terminology usage
-5. Dangerous or inappropriate treatment recommendations
+            Your job is to review the generated note for:
+            1. Medically incorrect statements
+            2. Inappropriate clinical conclusions
+            3. Misrepresentation of symptoms or findings
+            4. Incorrect medical terminology usage
+            5. Dangerous or inappropriate treatment recommendations
 
-Consider:
-- Clinical appropriateness of assessments
-- Logical consistency between sections
-- Proper use of medical terminology
-- Safety of recommendations
+            Consider:
+            - Clinical appropriateness of assessments
+            - Logical consistency between sections
+            - Proper use of medical terminology
+            - Safety of recommendations
 
-Respond in JSON format with:
-{
-  "accuracy_issues": [
-    {
-      "issue": "description of the problem",
-      "severity": "critical/high/medium/low",
-      "explanation": "why this is problematic",
-      "location": "where in the note",
-      "correction": "what should be stated instead (if applicable)"
-    }
-  ],
-  "accuracy_score": 0.0-1.0 (0 = major issues, 1 = accurate),
-  "confidence": 0.0-1.0
-}"""
-        
+            Respond in JSON format with:
+            {
+            "accuracy_issues": [
+                {
+                "issue": "description of the problem",
+                "severity": "critical/high/medium/low",
+                "explanation": "why this is problematic",
+                "location": "where in the note",
+                "correction": "what should be stated instead (if applicable)"
+                }
+            ],
+            "accuracy_score": 0.0-1.0 (0 = major issues, 1 = accurate),
+            "confidence": 0.0-1.0
+            }"""
+                    
         user_template = """Transcript:
-{transcript}
+            {transcript}
 
-Generated SOAP Note:
-{generated_note}
+            Generated SOAP Note:
+            {generated_note}
 
-Identify any clinical accuracy issues or medically problematic statements in the note."""
+            Identify any clinical accuracy issues or medically problematic statements in the note."""
         
         return system_prompt, user_template
 

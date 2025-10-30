@@ -2,8 +2,10 @@
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 from pathlib import Path
+from typing import Optional
+
+from dotenv import load_dotenv
 
 
 @dataclass
@@ -64,7 +66,6 @@ class Config:
     def load(cls, env_file: Optional[str] = None) -> "Config":
         """Load configuration from environment and optional .env file."""
         if env_file and Path(env_file).exists():
-            from dotenv import load_dotenv
             load_dotenv(env_file)
         
         return cls(

@@ -2,8 +2,10 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from tqdm import tqdm
 
 
 class Severity(Enum):
@@ -101,8 +103,6 @@ class BaseEvaluator(ABC):
         Returns:
             List of EvaluationResult objects
         """
-        from tqdm import tqdm
-        
         results = []
         iterator = tqdm(data, desc=f"Evaluating with {self.name}") if show_progress else data
         

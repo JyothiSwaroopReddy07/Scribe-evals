@@ -404,24 +404,44 @@ def display_detailed_note_analysis(result: Dict):
         })
     
     scores_df = pd.DataFrame(scores_data)
-    st.dataframe(scores_df.style.background_gradient(subset=['Score', 'Confidence'], cmap='RdYlGn'), 
-                use_container_width=True)
+    
+    # Convert 'N/A' to NaN for numeric operations
+    scores_df_numeric = scores_df.copy()
+    for col in ['Score', 'Confidence', 'Uncertainty']:
+        if col in scores_df_numeric.columns:
+            scores_df_numeric[col] = pd.to_numeric(scores_df_numeric[col], errors='coerce')
+    
+    # Apply gradient only to numeric columns that have values
+    gradient_cols = []
+    if scores_df_numeric['Score'].notna().any():
+        gradient_cols.append('Score')
+    if 'Confidence' in scores_df_numeric.columns and scores_df_numeric['Confidence'].notna().any():
+        gradient_cols.append('Confidence')
+    
+    if gradient_cols:
+        st.dataframe(scores_df_numeric.style.background_gradient(subset=gradient_cols, cmap='RdYlGn'), 
+                    use_container_width=True)
+    else:
+        st.dataframe(scores_df, use_container_width=True)
     
     # Visualize scores
     fig = go.Figure()
     
     fig.add_trace(go.Bar(
         name='Score',
-        x=scores_df['Evaluator'],
-        y=scores_df['Score'],
+        x=scores_df_numeric['Evaluator'],
+        y=scores_df_numeric['Score'],
         marker_color='lightblue'
     ))
     
-    if 'Confidence' in scores_df.columns:
+    # Only add confidence line if there are valid numeric confidence values
+    if 'Confidence' in scores_df_numeric.columns and scores_df_numeric['Confidence'].notna().any():
+        # Filter out NaN values for the confidence trace
+        confidence_mask = scores_df_numeric['Confidence'].notna()
         fig.add_trace(go.Scatter(
             name='Confidence',
-            x=scores_df['Evaluator'],
-            y=scores_df['Confidence'],
+            x=scores_df_numeric.loc[confidence_mask, 'Evaluator'],
+            y=scores_df_numeric.loc[confidence_mask, 'Confidence'],
             mode='lines+markers',
             marker=dict(size=10, color='orange'),
             yaxis='y2'

@@ -1,9 +1,11 @@
 """Advanced confidence scoring system with uncertainty quantification."""
 
-import numpy as np
-from typing import Dict, List, Any, Optional, Tuple
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 
 
 class ConfidenceMethod(Enum):
@@ -91,7 +93,6 @@ class ConfidenceScorer:
         # For categorical predictions
         else:
             # Count most common prediction
-            from collections import Counter
             pred_counts = Counter(predictions)
             most_common_count = pred_counts.most_common(1)[0][1]
             agreement_score = most_common_count / n_predictions
@@ -166,7 +167,6 @@ class ConfidenceScorer:
             answers = responses
         
         # Count answer frequency
-        from collections import Counter
         answer_counts = Counter(answers)
         most_common_answer, most_common_count = answer_counts.most_common(1)[0]
         

@@ -1,14 +1,15 @@
 """Ensemble LLM Judge with multiple models, voting, and robust error handling."""
 
-import os
+import asyncio
 import json
-import time
 import logging
-from typing import Dict, Any, Optional, List, Callable, Tuple
+import os
+import random
+import time
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
-import asyncio
-from collections import Counter
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 try:
     from openai import OpenAI
@@ -80,7 +81,6 @@ class RetryStrategy:
         )
         
         if self.jitter:
-            import random
             delay = delay * (0.5 + random.random())
         
         return delay

@@ -1,17 +1,22 @@
 """Enhanced evaluation pipeline with advanced features and monitoring."""
 
-import os
+import argparse
+import csv
 import json
-import time
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from datetime import datetime
-from dataclasses import dataclass, asdict
 import logging
+import os
+import time
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
 from tqdm import tqdm
 
-from .data_loader import SOAPNote, DataLoader
+from .data_loader import DataLoader, SOAPNote
 from .evaluators import (
     DeterministicEvaluator,
     EnhancedHallucinationDetector,
@@ -19,8 +24,11 @@ from .evaluators import (
     EnhancedClinicalAccuracyEvaluator,
     SemanticCoherenceEvaluator,
     ClinicalReasoningEvaluator,
-    EvaluationResult
+    EvaluationResult,
+    Issue,
+    Severity
 )
+from .routing import IntelligentRouter, RoutingDecision
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +45,10 @@ class EnhancedPipelineConfig:
     enable_clinical_accuracy: bool = True
     enable_semantic_coherence: bool = True
     enable_clinical_reasoning: bool = True
+    
+    # Intelligent Routing (NEW!)
+    enable_intelligent_routing: bool = True
+    routing_mode: str = "balanced"  # "aggressive", "balanced", or "conservative"
     
     # Ensemble settings
     use_ensemble: bool = False
@@ -55,6 +67,7 @@ class EnhancedPipelineConfig:
     enable_caching: bool = True
     max_retries: int = 3
     timeout: float = 60.0
+    max_workers: int = 10  # Number of parallel worker threads
     
     # Monitoring
     enable_monitoring: bool = True
@@ -74,7 +87,14 @@ class EnhancedEvaluationPipeline:
         
         # Initialize evaluators
         self.evaluators = []
+        self.llm_evaluators = []  # Track LLM evaluators separately
+        self.deterministic_evaluator = None
         self._init_evaluators()
+        
+        # Initialize routing components
+        self.router = None
+        if self.config.enable_intelligent_routing:
+            self._init_routing()
         
         # Monitoring metrics
         self.metrics = {
@@ -83,10 +103,13 @@ class EnhancedEvaluationPipeline:
             "failed_evaluations": 0,
             "total_latency": 0.0,
             "evaluator_latencies": {},
-            "error_log": []
+            "error_log": [],
+            "routing_stats": {}
         }
         
         logger.info(f"Initialized {len(self.evaluators)} evaluators")
+        if self.config.enable_intelligent_routing:
+            logger.info(f"Intelligent routing enabled in {self.config.routing_mode} mode")
         logger.info(f"Configuration: {self.config}")
     
     def _setup_logging(self):
@@ -114,12 +137,25 @@ class EnhancedEvaluationPipeline:
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
     
+    def _init_routing(self):
+        """Initialize routing components (simplified - no sampling)."""
+        logger.info("Initializing routing system (NO SAMPLING)...")
+        
+        # Initialize router with 3-decision logic
+        self.router = IntelligentRouter(mode=self.config.routing_mode)
+        
+        logger.info("Routing system initialized successfully (safety-first approach)")
+    
     def _init_evaluators(self):
         """Initialize all configured evaluators."""
-        # Deterministic evaluator
+        # Deterministic evaluator (ALWAYS run, used for routing)
         if self.config.enable_deterministic:
             logger.info("Initializing DeterministicEvaluator...")
-            self.evaluators.append(DeterministicEvaluator())
+            enable_routing_metrics = self.config.enable_intelligent_routing
+            self.deterministic_evaluator = DeterministicEvaluator(
+                enable_routing_metrics=enable_routing_metrics
+            )
+            self.evaluators.append(self.deterministic_evaluator)
         
         # Check for API keys
         has_api_key = bool(os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY"))
@@ -142,31 +178,31 @@ class EnhancedEvaluationPipeline:
                 "temperature": self.config.temperature
             }
         
-        # Initialize enhanced evaluators
+        # Initialize enhanced LLM evaluators
         if self.config.enable_hallucination_detection:
             logger.info("Initializing EnhancedHallucinationDetector...")
             try:
-                self.evaluators.append(
-                    EnhancedHallucinationDetector(**ensemble_kwargs)
-                )
+                evaluator = EnhancedHallucinationDetector(**ensemble_kwargs)
+                self.evaluators.append(evaluator)
+                self.llm_evaluators.append(evaluator)
             except Exception as e:
                 logger.error(f"Could not initialize EnhancedHallucinationDetector: {e}")
         
         if self.config.enable_completeness_check:
             logger.info("Initializing EnhancedCompletenessChecker...")
             try:
-                self.evaluators.append(
-                    EnhancedCompletenessChecker(**ensemble_kwargs)
-                )
+                evaluator = EnhancedCompletenessChecker(**ensemble_kwargs)
+                self.evaluators.append(evaluator)
+                self.llm_evaluators.append(evaluator)
             except Exception as e:
                 logger.error(f"Could not initialize EnhancedCompletenessChecker: {e}")
         
         if self.config.enable_clinical_accuracy:
             logger.info("Initializing EnhancedClinicalAccuracyEvaluator...")
             try:
-                self.evaluators.append(
-                    EnhancedClinicalAccuracyEvaluator(**ensemble_kwargs)
-                )
+                evaluator = EnhancedClinicalAccuracyEvaluator(**ensemble_kwargs)
+                self.evaluators.append(evaluator)
+                self.llm_evaluators.append(evaluator)
             except Exception as e:
                 logger.error(f"Could not initialize EnhancedClinicalAccuracyEvaluator: {e}")
         
@@ -179,24 +215,29 @@ class EnhancedEvaluationPipeline:
         if self.config.enable_semantic_coherence:
             logger.info("Initializing SemanticCoherenceEvaluator...")
             try:
-                self.evaluators.append(
-                    SemanticCoherenceEvaluator(**single_model_kwargs)
-                )
+                evaluator = SemanticCoherenceEvaluator(**single_model_kwargs)
+                self.evaluators.append(evaluator)
+                self.llm_evaluators.append(evaluator)
             except Exception as e:
                 logger.error(f"Could not initialize SemanticCoherenceEvaluator: {e}")
         
         if self.config.enable_clinical_reasoning:
             logger.info("Initializing ClinicalReasoningEvaluator...")
             try:
-                self.evaluators.append(
-                    ClinicalReasoningEvaluator(**single_model_kwargs)
-                )
+                evaluator = ClinicalReasoningEvaluator(**single_model_kwargs)
+                self.evaluators.append(evaluator)
+                self.llm_evaluators.append(evaluator)
             except Exception as e:
                 logger.error(f"Could not initialize ClinicalReasoningEvaluator: {e}")
     
     def evaluate_note(self, note: SOAPNote) -> Dict[str, EvaluationResult]:
         """
-        Evaluate a single SOAP note with all configured evaluators.
+        Evaluate a single SOAP note with intelligent routing.
+        
+        With routing enabled:
+        1. ALWAYS run deterministic evaluator first (fast, cheap)
+        2. Make routing decision based on deterministic metrics
+        3. Conditionally run LLM evaluators based on routing decision
         
         Args:
             note: SOAPNote object
@@ -206,45 +247,149 @@ class EnhancedEvaluationPipeline:
         """
         results = {}
         note_start_time = time.time()
+        routing_decision = None
         
-        for evaluator in self.evaluators:
+        # Step 1: ALWAYS run deterministic evaluator first
+        if self.deterministic_evaluator:
             eval_start_time = time.time()
             
             try:
-                logger.info(f"Evaluating {note.id} with {evaluator.name}")
+                logger.info(f"Evaluating {note.id} with DeterministicMetrics")
                 
-                result = evaluator.evaluate(
+                deterministic_result = self.deterministic_evaluator.evaluate(
                     transcript=note.transcript,
                     generated_note=note.generated_note,
                     reference_note=note.reference_note,
                     note_id=note.id
                 )
                 
-                results[evaluator.name] = result
+                results["DeterministicMetrics"] = deterministic_result
                 
                 # Track metrics
                 eval_latency = time.time() - eval_start_time
-                if evaluator.name not in self.metrics["evaluator_latencies"]:
-                    self.metrics["evaluator_latencies"][evaluator.name] = []
-                self.metrics["evaluator_latencies"][evaluator.name].append(eval_latency)
+                if "DeterministicMetrics" not in self.metrics["evaluator_latencies"]:
+                    self.metrics["evaluator_latencies"]["DeterministicMetrics"] = []
+                self.metrics["evaluator_latencies"]["DeterministicMetrics"].append(eval_latency)
                 
                 self.metrics["successful_evaluations"] += 1
                 
                 logger.info(
-                    f"Completed {evaluator.name} for {note.id} in {eval_latency:.2f}s "
-                    f"(score: {result.score:.3f}, issues: {len(result.issues)})"
+                    f"Completed DeterministicMetrics for {note.id} in {eval_latency:.2f}s "
+                    f"(score: {deterministic_result.score:.3f}, issues: {len(deterministic_result.issues)})"
                 )
                 
             except Exception as e:
-                logger.error(f"Error evaluating {note.id} with {evaluator.name}: {e}", exc_info=True)
-                
+                logger.error(f"Error in deterministic evaluation for {note.id}: {e}", exc_info=True)
                 self.metrics["failed_evaluations"] += 1
-                self.metrics["error_log"].append({
-                    "note_id": note.id,
-                    "evaluator": evaluator.name,
-                    "error": str(e),
-                    "timestamp": datetime.now().isoformat()
-                })
+                # Continue anyway - try LLM evaluators
+                deterministic_result = None
+        else:
+            deterministic_result = None
+        
+        # Step 2: Routing decision (if enabled)
+        should_run_llm = True  # Default: run LLM evaluators
+        
+        if self.config.enable_intelligent_routing and self.router and deterministic_result:
+            routing_result = self.router.route(deterministic_result)
+            routing_decision = routing_result.decision
+            should_run_llm = routing_result.should_run_llm
+            
+            logger.info(
+                f"Routing decision for {note.id}: {routing_decision.value} - {routing_result.reason}"
+            )
+            
+            # Add routing decision summary to deterministic results
+            if routing_decision == RoutingDecision.AUTO_REJECT:
+                deterministic_result.issues.append(Issue(
+                    type="auto_rejected",
+                    severity=Severity.INFO,
+                    description=f"Note auto-rejected (score {deterministic_result.score:.2f} < 0.35). Found {len(deterministic_result.issues)} quality issues. LLM evaluation skipped.",
+                    evidence={
+                        "routing_decision": "AUTO_REJECT",
+                        "overall_score": deterministic_result.score,
+                        "issue_types": [issue.type for issue in deterministic_result.issues if issue.type != "auto_rejected"],
+                        "reason": routing_result.reason
+                    },
+                    confidence=1.0
+                ))
+            elif routing_decision == RoutingDecision.AUTO_ACCEPT:
+                # Extract routing metrics from deterministic result
+                routing_confidence = deterministic_result.metrics.get("routing_confidence", 0.0)
+                deterministic_result.issues.append(Issue(
+                    type="auto_accepted",
+                    severity=Severity.INFO,
+                    description=f"Note auto-accepted (score {deterministic_result.score:.2f}, confidence {routing_confidence:.2f}). Quality verified by deterministic metrics. LLM evaluation skipped.",
+                    evidence={
+                        "routing_decision": "AUTO_ACCEPT",
+                        "overall_score": deterministic_result.score,
+                        "routing_confidence": routing_confidence,
+                        "hallucination_risk": deterministic_result.metrics.get("hallucination_risk", 0.0),
+                        "clinical_accuracy_risk": deterministic_result.metrics.get("clinical_accuracy_risk", 0.0),
+                        "reasoning_quality_risk": deterministic_result.metrics.get("reasoning_quality_risk", 0.0),
+                        "reason": routing_result.reason
+                    },
+                    confidence=1.0
+                ))
+            elif routing_decision == RoutingDecision.LLM_REQUIRED:
+                deterministic_result.issues.append(Issue(
+                    type="llm_evaluation_required",
+                    severity=Severity.INFO,
+                    description=f"Note requires LLM evaluation (score {deterministic_result.score:.2f}). Deterministic metrics show ambiguity or potential issues.",
+                    evidence={
+                        "routing_decision": "LLM_REQUIRED",
+                        "overall_score": deterministic_result.score,
+                        "ambiguity_score": deterministic_result.metrics.get("ambiguity_score", 0.0),
+                        "reason": routing_result.reason
+                    },
+                    confidence=1.0
+                ))
+        
+        # Step 3: Conditionally run LLM evaluators
+        if should_run_llm and self.llm_evaluators:
+            for evaluator in self.llm_evaluators:
+                eval_start_time = time.time()
+                
+                try:
+                    logger.info(f"Evaluating {note.id} with {evaluator.name}")
+                    
+                    result = evaluator.evaluate(
+                        transcript=note.transcript,
+                        generated_note=note.generated_note,
+                        reference_note=note.reference_note,
+                        note_id=note.id
+                    )
+                    
+                    results[evaluator.name] = result
+                    
+                    # Track metrics
+                    eval_latency = time.time() - eval_start_time
+                    if evaluator.name not in self.metrics["evaluator_latencies"]:
+                        self.metrics["evaluator_latencies"][evaluator.name] = []
+                    self.metrics["evaluator_latencies"][evaluator.name].append(eval_latency)
+                    
+                    self.metrics["successful_evaluations"] += 1
+                    
+                    logger.info(
+                        f"Completed {evaluator.name} for {note.id} in {eval_latency:.2f}s "
+                        f"(score: {result.score:.3f}, issues: {len(result.issues)})"
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Error evaluating {note.id} with {evaluator.name}: {e}", exc_info=True)
+                    
+                    self.metrics["failed_evaluations"] += 1
+                    self.metrics["error_log"].append({
+                        "note_id": note.id,
+                        "evaluator": evaluator.name,
+                        "error": str(e),
+                        "timestamp": datetime.now().isoformat()
+                    })
+        elif not should_run_llm:
+            logger.info(f"Skipping LLM evaluators for {note.id} based on routing decision")
+        
+        # Add routing metadata to results
+        if routing_decision:
+            results["_routing_decision"] = routing_decision.value
         
         note_latency = time.time() - note_start_time
         self.metrics["total_latency"] += note_latency
@@ -254,25 +399,68 @@ class EnhancedEvaluationPipeline:
     
     def evaluate_batch(self, notes: List[SOAPNote]) -> List[Dict[str, EvaluationResult]]:
         """
-        Evaluate multiple SOAP notes.
+        Evaluate multiple SOAP notes using PARALLEL processing.
         
         Args:
             notes: List of SOAPNote objects
             
         Returns:
-            List of dicts mapping evaluator name to EvaluationResult
+            List of dicts mapping evaluator name to EvaluationResult (in same order as input)
         """
-        all_results = []
+        logger.info(f"Starting PARALLEL batch evaluation of {len(notes)} notes with {self.config.max_workers} workers")
         
-        logger.info(f"Starting batch evaluation of {len(notes)} notes")
+        # Dictionary to store results with note index as key
+        results_dict = {}
         
-        for note in tqdm(notes, desc="Evaluating notes"):
-            results = self.evaluate_note(note)
-            all_results.append(results)
+        # Use ThreadPoolExecutor for parallel evaluation
+        with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
+            # Submit all notes for evaluation
+            future_to_index = {
+                executor.submit(self._evaluate_note_safe, note): idx
+                for idx, note in enumerate(notes)
+            }
+            
+            # Collect results as they complete
+            with tqdm(total=len(notes), desc="Evaluating notes") as pbar:
+                for future in as_completed(future_to_index):
+                    idx = future_to_index[future]
+                    note = notes[idx]
+                    
+                    try:
+                        results = future.result()
+                        results_dict[idx] = results
+                    except Exception as e:
+                        logger.error(f"Error evaluating note {note.id}: {e}", exc_info=True)
+                        self.metrics["failed_evaluations"] += 1
+                        results_dict[idx] = {}
+                    
+                    pbar.update(1)
+        
+        # Convert dict back to list in original order
+        all_results = [results_dict.get(i, {}) for i in range(len(notes))]
         
         logger.info(f"Completed batch evaluation")
         
         return all_results
+    
+    def _evaluate_note_safe(self, note: SOAPNote) -> Dict[str, EvaluationResult]:
+        """
+        Thread-safe wrapper for evaluate_note with error handling.
+        
+        Args:
+            note: SOAPNote object
+            
+        Returns:
+            Dict mapping evaluator name to EvaluationResult
+        """
+        self.metrics["total_evaluations"] += 1
+        
+        try:
+            return self.evaluate_note(note)
+        except Exception as e:
+            logger.error(f"Error in _evaluate_note_safe for {note.id}: {e}", exc_info=True)
+            self.metrics["failed_evaluations"] += 1
+            return {}
     
     def run(self, notes: List[SOAPNote]) -> Dict[str, Any]:
         """
@@ -298,6 +486,10 @@ class EnhancedEvaluationPipeline:
         
         # Add performance metrics
         summary["performance"] = self._get_performance_metrics()
+        
+        # Add routing statistics (if enabled)
+        if self.config.enable_intelligent_routing and self.router:
+            summary["routing_statistics"] = self.router.get_routing_statistics()
         
         # Save results
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -454,17 +646,14 @@ class EnhancedEvaluationPipeline:
     
     def _count_by_severity(self, issues: List) -> Dict[str, int]:
         """Count issues by severity."""
-        from collections import Counter
         return dict(Counter(issue.severity.value for issue in issues))
     
     def _count_by_type(self, issues: List) -> Dict[str, int]:
         """Count issues by type."""
-        from collections import Counter
         return dict(Counter(issue.type for issue in issues))
     
     def _count_notes_with_critical_issues(self, all_results: List[Dict[str, EvaluationResult]]) -> int:
         """Count notes with at least one critical issue."""
-        from .evaluators import Severity
         
         count = 0
         for results in all_results:
@@ -532,7 +721,6 @@ class EnhancedEvaluationPipeline:
         output_file: Path
     ):
         """Save summary as CSV."""
-        import csv
         
         with open(output_file, 'w', newline='') as f:
             writer = csv.writer(f)
@@ -635,8 +823,6 @@ class EnhancedEvaluationPipeline:
 
 def main():
     """Main entry point for enhanced pipeline."""
-    import argparse
-    from dotenv import load_dotenv
     
     load_dotenv()
     
