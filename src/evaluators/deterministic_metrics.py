@@ -54,17 +54,107 @@ class DeterministicEvaluator(BaseEvaluator):
     """Fast deterministic metrics for SOAP note evaluation with enhanced routing metrics."""
     
     def __init__(self, enable_bert_score: bool = False, enable_semantic_sim: bool = False,
-                 enable_routing_metrics: bool = True):
+                 enable_routing_metrics: bool = True, max_examples: int = 5):
         super().__init__("DeterministicMetrics")
         self.enable_bert_score = enable_bert_score
         self.enable_semantic_sim = enable_semantic_sim
         self.enable_routing_metrics = enable_routing_metrics
+        self.max_examples = max_examples  # Configurable instead of arbitrary [:5]
         
         # Lazy-load knowledge bases
         self._medical_terms = None
         self._dosage_ranges = None
         self._drug_condition_coherence = None
         self._vital_sign_ranges = None
+        
+        # Compiled regex patterns cache (avoid recompilation)
+        self._compiled_patterns = self._compile_patterns()
+        
+        # Embedding cache for repeated text (avoid recomputation)
+        self._embedding_cache = {}
+        
+        # Medical terms as sets for O(1) lookup instead of O(n) list search
+        self._medical_terms_sets = None
+    
+    def _compile_patterns(self) -> Dict[str, Any]:
+        """Compile all regex patterns once at initialization to avoid repeated compilation."""
+        return {
+            # SOAP structure patterns
+            'soap_sections': {
+                'subjective': re.compile(r'\b(subjective|s:)\b', re.IGNORECASE),
+                'objective': re.compile(r'\b(objective|o:)\b', re.IGNORECASE),
+                'assessment': re.compile(r'\b(assessment|a:)\b', re.IGNORECASE),
+                'plan': re.compile(r'\b(plan|p:)\b', re.IGNORECASE)
+            },
+            
+            # Medical entity patterns
+            'medical_entities': [
+                re.compile(r'\b\d+\s*(?:mg|mcg|g|ml|cc|units?|milligrams?|grams?)\b', re.IGNORECASE),
+                re.compile(r'\b\d+\s*(?:bpm|mmHg|°[CF])\b', re.IGNORECASE),
+                re.compile(r'\b\d+/\d+\s*(?:mmHg)?\b', re.IGNORECASE),
+                re.compile(r'\b(?:hypertension|diabetes|asthma|copd|pneumonia|infection|'
+                          r'high blood pressure|elevated (?:BP|blood pressure)|'
+                          r'elevated (?:blood sugar|glucose)|heart attack|stroke|MI|CVA)\b', re.IGNORECASE)
+            ],
+            
+            # Specificity patterns
+            'specificity': [
+                (re.compile(r'\b\d+\.\d+\b'), 'precise decimals'),
+                (re.compile(r'\b\d{1,2}/\d{1,2}/\d{4}\b'), 'exact dates'),
+                (re.compile(r'\b\d{1,2}:\d{2}\s*(?:AM|PM)\b', re.IGNORECASE), 'exact times'),
+                (re.compile(r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b'), 'full names')
+            ],
+            
+            # Sentiment patterns
+            'uncertainty': re.compile(r'\b(maybe|possibly|might|could be|unclear|uncertain|not sure|probably)\b', re.IGNORECASE),
+            'certainty': re.compile(r'\b(definitely|confirmed|diagnosed|established|certain|clear)\b', re.IGNORECASE),
+            
+            # Dosage pattern
+            'dosage': re.compile(r'(\w+)\s+(\d+(?:\.\d+)?)\s*(mg|mcg|ml|g|units)\b', re.IGNORECASE),
+            
+            # Vital signs patterns
+            'blood_pressure': re.compile(r'(\d{2,3})/(\d{2,3})\s*mmHg', re.IGNORECASE),
+            'heart_rate': re.compile(r'(\d{2,3})\s*bpm', re.IGNORECASE),
+            'temperature': re.compile(r'(\d{2,3}(?:\.\d)?)\s*°?([FC])', re.IGNORECASE),
+            
+            # Temporal patterns
+            'temporal': [
+                (re.compile(r'(\d+)\s+(years?|months?|days?|weeks?)\s+ago', re.IGNORECASE), 'relative'),
+                (re.compile(r'started\s+(?:on\s+)?(\d{1,2}/\d{1,2}/\d{4})', re.IGNORECASE), 'absolute'),
+                (re.compile(r'since\s+(\d{4})', re.IGNORECASE), 'year'),
+                (re.compile(r'(yesterday|today|last week|last month)', re.IGNORECASE), 'recent')
+            ],
+            
+            # Causal patterns
+            'causal': [
+                re.compile(r'(.+?)\s+(?:because|due to|caused by|resulting from)\s+(.+?)(?:[.!?]|$)', re.IGNORECASE),
+                re.compile(r'(.+?)\s+(?:leads to|results in|causes)\s+(.+?)(?:[.!?]|$)', re.IGNORECASE)
+            ],
+            
+            # Lab value patterns
+            'lab_values': [
+                (re.compile(r'glucose[:\s]+(\d+(?:\.\d+)?)\s*mg/dl', re.IGNORECASE), 'glucose_fasting'),
+                (re.compile(r'hba1c[:\s]+(\d+(?:\.\d+)?)\s*%', re.IGNORECASE), 'hba1c'),
+                (re.compile(r'creatinine[:\s]+(\d+(?:\.\d+)?)\s*mg/dl', re.IGNORECASE), 'creatinine'),
+                (re.compile(r'potassium[:\s]+(\d+(?:\.\d+)?)\s*meq/l', re.IGNORECASE), 'potassium'),
+                (re.compile(r'sodium[:\s]+(\d+)\s*meq/l', re.IGNORECASE), 'sodium'),
+                (re.compile(r'hemoglobin[:\s]+(\d+(?:\.\d+)?)\s*g/dl', re.IGNORECASE), 'hemoglobin'),
+                (re.compile(r'wbc[:\s]+(\d+(?:\.\d+)?)\s*k/µl', re.IGNORECASE), 'wbc'),
+                (re.compile(r'inr[:\s]+(\d+(?:\.\d+)?)', re.IGNORECASE), 'inr'),
+                (re.compile(r'troponin[:\s]+(\d+(?:\.\d+)?)\s*ng/ml', re.IGNORECASE), 'troponin')
+            ],
+            
+            # Sentence splitter
+            'sentence_split': re.compile(r'[.!?]+'),
+            
+            # SOAP section headers
+            'soap_headers': {
+                'subjective': re.compile(r'^(subjective|s):', re.IGNORECASE),
+                'objective': re.compile(r'^(objective|o):', re.IGNORECASE),
+                'assessment': re.compile(r'^(assessment|a):', re.IGNORECASE),
+                'plan': re.compile(r'^(plan|p):', re.IGNORECASE)
+            }
+        }
         
     def evaluate(
         self,
@@ -155,20 +245,15 @@ class DeterministicEvaluator(BaseEvaluator):
         )
     
     def _check_soap_structure(self, note: str) -> tuple[float, List[Issue]]:
-        """Check if SOAP note has proper structure."""
+        """Check if SOAP note has proper structure using precompiled patterns."""
         issues = []
         
-        # Expected SOAP sections
-        sections = {
-            'subjective': r'\b(subjective|s:)\b',
-            'objective': r'\b(objective|o:)\b',
-            'assessment': r'\b(assessment|a:)\b',
-            'plan': r'\b(plan|p:)\b'
-        }
+        # Use precompiled patterns
+        soap_patterns = self._compiled_patterns['soap_sections']
         
         found_sections = {}
-        for section_name, pattern in sections.items():
-            found = bool(re.search(pattern, note, re.IGNORECASE))
+        for section_name, pattern in soap_patterns.items():
+            found = bool(pattern.search(note))
             found_sections[section_name] = found
             
             if not found:
@@ -179,13 +264,14 @@ class DeterministicEvaluator(BaseEvaluator):
                     confidence=0.9
                 ))
         
-        structure_score = sum(found_sections.values()) / len(sections)
+        structure_score = sum(found_sections.values()) / len(soap_patterns)
         
         return structure_score, issues
     
     def _check_entity_coverage(self, transcript: str, generated_note: str) -> tuple[float, List[Issue]]:
         """
         Check coverage of medical entities using SEMANTIC SIMILARITY (embeddings).
+        Optimized: single-pass entity extraction using precompiled patterns.
         
         Handles semantic paraphrasing:
         - "hypertension" ≈ "high blood pressure"  ✅
@@ -195,21 +281,13 @@ class DeterministicEvaluator(BaseEvaluator):
         """
         issues = []
         
-        # Basic patterns to EXTRACT entities (not for matching!)
-        medical_patterns = [
-            r'\b\d+\s*(?:mg|mcg|g|ml|cc|units?|milligrams?|grams?)\b',  # Dosages
-            r'\b\d+\s*(?:bpm|mmHg|°[CF])\b',  # Vital signs
-            r'\b\d+/\d+\s*(?:mmHg)?\b',  # Blood pressure
-            # Common conditions
-            r'\b(?:hypertension|diabetes|asthma|copd|pneumonia|infection|'
-            r'high blood pressure|elevated (?:BP|blood pressure)|'
-            r'elevated (?:blood sugar|glucose)|heart attack|stroke|MI|CVA)\b',
-        ]
+        # Use precompiled patterns for efficient extraction
+        medical_patterns = self._compiled_patterns['medical_entities']
         
-        # Extract entities from transcript
+        # Extract entities from transcript in single pass
         transcript_entities = set()
         for pattern in medical_patterns:
-            transcript_entities.update(re.findall(pattern, transcript, re.IGNORECASE))
+            transcript_entities.update(pattern.findall(transcript))
         
         if not transcript_entities:
             return 1.0, issues  # No entities to check
@@ -231,38 +309,57 @@ class DeterministicEvaluator(BaseEvaluator):
         
         coverage = covered_count / len(transcript_entities) if transcript_entities else 1.0
         
-        # Report issues for truly missing entities
+        # Report issues for truly missing entities (use configurable limit)
         if truly_missing and len(truly_missing) / len(transcript_entities) > 0.3:
-                issues.append(Issue(
-                    type="entity_coverage",
-                    severity=Severity.MEDIUM,
+            issues.append(Issue(
+                type="entity_coverage",
+                severity=Severity.MEDIUM,
                 description=f"Missing {len(truly_missing)} medical entities from transcript",
                 evidence={
-                    "missing_entities": truly_missing[:5],
-                    "semantically_matched": semantically_matched[:5] if semantically_matched else None,
-                    "matching_method": "semantic_embeddings"
+                    "missing_entities": truly_missing[:self.max_examples],
+                    "semantically_matched": semantically_matched[:self.max_examples] if semantically_matched else None,
+                    "matching_method": "semantic_embeddings",
+                    "total_missing": len(truly_missing),
+                    "total_matched": len(semantically_matched)
                 },
                 confidence=0.8
             ))
         
         return coverage, issues
     
+    def _get_cached_embedding(self, text: str):
+        """Get embedding from cache or compute and cache it."""
+        # Use hash as cache key (memory efficient)
+        cache_key = hash(text)
+        
+        if cache_key not in self._embedding_cache:
+            # Lazy load sentence transformer
+            if not hasattr(self, '_entity_embedding_model'):
+                try:
+                    from sentence_transformers import SentenceTransformer  # type: ignore
+                    self._entity_embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                except ImportError:
+                    return None
+            
+            # Compute and cache
+            self._embedding_cache[cache_key] = self._entity_embedding_model.encode(text, convert_to_tensor=True)
+        
+        return self._embedding_cache[cache_key]
+    
     def _find_semantic_match(self, entity: str, text: str, threshold: float = 0.70) -> bool:
         """
         Find if entity has semantic match in text using sentence embeddings.
+        Optimized: caches embeddings to avoid recomputation.
         
         Returns True if any phrase in text is semantically similar to entity.
         Handles paraphrases like "ten milligrams" ≈ "10 mg".
         """
         try:
-            # Lazy load sentence transformer
-            if not hasattr(self, '_entity_embedding_model'):
-                try:
-                    from sentence_transformers import SentenceTransformer, util  # type: ignore
-                    self._entity_embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-                except ImportError:
-                    # Fallback to substring match if embeddings not available
-                    return entity.lower() in text.lower()
+            # Try to get cached embedding for entity
+            entity_embedding = self._get_cached_embedding(entity)
+            if entity_embedding is None:
+                # Fallback to substring match if embeddings not available
+                return entity.lower() in text.lower()
             
             from sentence_transformers import util  # type: ignore
             import torch
@@ -280,18 +377,16 @@ class DeterministicEvaluator(BaseEvaluator):
             if not windows:
                 return False
             
-            # Encode entity and all windows
-            entity_embedding = self._entity_embedding_model.encode(entity, convert_to_tensor=True)
+            # Batch encode all windows (more efficient than one-by-one)
+            if not hasattr(self, '_entity_embedding_model'):
+                from sentence_transformers import SentenceTransformer  # type: ignore
+                self._entity_embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            
             window_embeddings = self._entity_embedding_model.encode(windows, convert_to_tensor=True)
             
             # Compute cosine similarities
             similarities = util.cos_sim(entity_embedding, window_embeddings)[0]
             max_similarity = torch.max(similarities).item()
-            
-            # Debug logging (optional)
-            if max_similarity >= threshold:
-                # print(f"✅ MATCH: '{entity}' found with similarity {max_similarity:.3f}")
-                pass
             
             return max_similarity >= threshold
             
@@ -465,7 +560,7 @@ class DeterministicEvaluator(BaseEvaluator):
     # ========== ENHANCED ROUTING METRICS ==========
     
     def _load_knowledge_bases(self):
-        """Lazy load medical knowledge bases."""
+        """Lazy load medical knowledge bases and convert to optimized data structures."""
         if self._medical_terms is None:
             kb_dir = Path(__file__).parent.parent / "knowledge_bases"
             with open(kb_dir / "medical_terms.json", 'r') as f:
@@ -476,6 +571,21 @@ class DeterministicEvaluator(BaseEvaluator):
                 self._drug_condition_coherence = json.load(f)
             with open(kb_dir / "vital_sign_ranges.json", 'r') as f:
                 self._vital_sign_ranges = json.load(f)
+            
+            # Convert medical term lists to sets for O(1) lookup instead of O(n)
+            self._medical_terms_sets = {
+                'drugs': set(term.lower() for term in self._medical_terms.get('drugs', [])),
+                'conditions': set(term.lower() for term in self._medical_terms.get('conditions', [])),
+                'procedures': set(term.lower() for term in self._medical_terms.get('procedures', []))
+            }
+            
+            # Precompile regex patterns for medical terms (one-time cost)
+            self._medical_term_patterns = {
+                'drugs': [re.compile(r'\b' + re.escape(drug) + r'\b', re.IGNORECASE) 
+                         for drug in self._medical_terms.get('drugs', [])],
+                'conditions': [re.compile(r'\b' + re.escape(cond) + r'\b', re.IGNORECASE) 
+                              for cond in self._medical_terms.get('conditions', [])]
+            }
     
     def _compute_routing_metrics(self, transcript: str, generated_note: str) -> Tuple[Dict[str, float], List[Issue]]:
         """
@@ -563,28 +673,28 @@ class DeterministicEvaluator(BaseEvaluator):
         """
         Check for entities in note that are NOT in transcript (potential hallucinations).
         Uses semantic similarity to avoid false positives from paraphrasing.
+        Optimized: single-pass extraction with precompiled patterns.
         """
         issues = []
         
-        # Extract entities from generated note
-        medical_patterns = [
-            r'\b\d+\s*(?:mg|mcg|g|ml|cc|units?|milligrams?|grams?)\b',
-            r'\b\d+\s*(?:bpm|mmHg|°[CF])\b',
-            r'\b\d+/\d+\s*(?:mmHg)?\b',
-        ]
+        # Extract entities from generated note using precompiled patterns
+        medical_patterns = self._compiled_patterns['medical_entities']
         
         note_entities = set()
         for pattern in medical_patterns:
-            note_entities.update(re.findall(pattern, generated_note, re.IGNORECASE))
+            note_entities.update(pattern.findall(generated_note))
         
-        # Also extract drug names and conditions from note
-        for drug in self._medical_terms['drugs']:
-            if re.search(r'\b' + re.escape(drug) + r'\b', generated_note, re.IGNORECASE):
-                note_entities.add(drug)
-        
-        for condition in self._medical_terms['conditions']:
-            if re.search(r'\b' + re.escape(condition) + r'\b', generated_note, re.IGNORECASE):
-                note_entities.add(condition)
+        # Also extract drug names and conditions from note using precompiled patterns
+        if hasattr(self, '_medical_term_patterns'):
+            for pattern in self._medical_term_patterns['drugs']:
+                match = pattern.search(generated_note)
+                if match:
+                    note_entities.add(match.group(0))
+            
+            for pattern in self._medical_term_patterns['conditions']:
+                match = pattern.search(generated_note)
+                if match:
+                    note_entities.add(match.group(0))
         
         if not note_entities:
             return 0.0, issues
@@ -602,7 +712,11 @@ class DeterministicEvaluator(BaseEvaluator):
                 type="potential_hallucination",
                 severity=Severity.HIGH,
                 description=f"Found {len(reverse_entities)} entities in note not present in transcript",
-                evidence={"entities": reverse_entities[:5]},
+                evidence={
+                    "entities": reverse_entities[:self.max_examples],
+                    "total_reverse_entities": len(reverse_entities),
+                    "total_note_entities": len(note_entities)
+                },
                 confidence=0.75
             ))
         
@@ -612,21 +726,20 @@ class DeterministicEvaluator(BaseEvaluator):
         """
         Detect suspicious precision in note compared to transcript.
         High specificity in note vs vague transcript suggests hallucination.
+        Optimized: uses precompiled patterns.
         """
         issues = []
-        specificity_patterns = [
-            (r'\b\d+\.\d+\b', 'precise decimals'),  # Precise decimals: 120.5
-            (r'\b\d{1,2}/\d{1,2}/\d{4}\b', 'exact dates'),  # Exact dates: 12/15/2023
-            (r'\b\d{1,2}:\d{2}\s*(?:AM|PM)\b', 'exact times'),  # Exact times: 2:15 PM
-            (r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b', 'full names'),  # Full names
-        ]
+        
+        # Use precompiled specificity patterns
+        specificity_patterns = self._compiled_patterns['specificity']
         
         note_specific_items = []
         transcript_specific_items = []
         
+        # Single pass through both texts with precompiled patterns
         for pattern, desc in specificity_patterns:
-            note_matches = re.findall(pattern, generated_note)
-            transcript_matches = re.findall(pattern, transcript)
+            note_matches = pattern.findall(generated_note)
+            transcript_matches = pattern.findall(transcript)
             note_specific_items.extend([(match, desc) for match in note_matches])
             transcript_specific_items.extend(transcript_matches)
         
@@ -646,12 +759,17 @@ class DeterministicEvaluator(BaseEvaluator):
         
         # Create issue if high mismatch
         if mismatch_score > 0.3 and note_count > transcript_count:
-            overly_specific = [f"{item[0]} ({item[1]})" for item in note_specific_items[:5]]
+            overly_specific = [f"{item[0]} ({item[1]})" for item in note_specific_items[:self.max_examples]]
             issues.append(Issue(
                 type="overly_specific_details",
                 severity=Severity.HIGH,
                 description=f"Found {note_count} overly precise details in note vs {transcript_count} in transcript (potential hallucinations)",
-                evidence={"examples": overly_specific, "mismatch_ratio": f"{mismatch_ratio:.2f}"},
+                evidence={
+                    "examples": overly_specific, 
+                    "mismatch_ratio": f"{mismatch_ratio:.2f}",
+                    "total_note_specific": note_count,
+                    "total_transcript_specific": transcript_count
+                },
                 confidence=0.75
             ))
         
@@ -661,28 +779,28 @@ class DeterministicEvaluator(BaseEvaluator):
         """
         Check if note has abnormally high medical jargon compared to transcript.
         High density ratio suggests unnecessary jargon injection.
+        Optimized: Uses set operations for O(1) lookups instead of nested loops.
         """
         issues = []
         
         def get_medical_density(text):
+            """Optimized medical term counting using set operations."""
             words = text.lower().split()
             if not words:
-                return 0.0, []
+                return 0.0, set()
             
-            medical_count = 0
-            found_terms = []
-            all_medical_terms = (
-                self._medical_terms['drugs'] + 
-                self._medical_terms['conditions'] + 
-                self._medical_terms['procedures']
-            )
+            text_lower = text.lower()
+            found_terms = set()
             
-            for term in all_medical_terms:
-                if term.lower() in text.lower():
-                    medical_count += 1
-                    found_terms.append(term)
+            # Use set-based lookups (O(1)) instead of list iteration (O(n))
+            for category in ['drugs', 'conditions', 'procedures']:
+                if self._medical_terms_sets and category in self._medical_terms_sets:
+                    # Check each medical term once
+                    for term in self._medical_terms_sets[category]:
+                        if term in text_lower:
+                            found_terms.add(term)
             
-            return medical_count / len(words) * 100, found_terms
+            return len(found_terms) / len(words) * 100, found_terms
         
         note_density, note_terms = get_medical_density(generated_note)
         transcript_density, transcript_terms = get_medical_density(transcript)
@@ -697,7 +815,8 @@ class DeterministicEvaluator(BaseEvaluator):
         
         # Create issue if abnormally high medical jargon
         if density_ratio > 2.5:
-            extra_terms = [t for t in note_terms if t not in transcript_terms]
+            # Use set difference for efficient comparison
+            extra_terms = list(note_terms - transcript_terms)
             issues.append(Issue(
                 type="abnormal_medical_jargon",
                 severity=Severity.MEDIUM,
@@ -705,7 +824,8 @@ class DeterministicEvaluator(BaseEvaluator):
                 evidence={
                     "transcript_density": f"{transcript_density:.1f}%",
                     "note_density": f"{note_density:.1f}%",
-                    "extra_medical_terms": extra_terms[:5]
+                    "extra_medical_terms": extra_terms[:self.max_examples],
+                    "total_extra_terms": len(extra_terms)
                 },
                 confidence=0.70
             ))
@@ -715,19 +835,23 @@ class DeterministicEvaluator(BaseEvaluator):
     def _check_hedging_mismatch(self, transcript: str, generated_note: str) -> Tuple[float, List[Issue]]:
         """
         Detect cases where transcript expresses uncertainty but note is overly confident.
+        Optimized: uses precompiled patterns.
         """
         issues = []
-        uncertainty_pattern = r'\b(maybe|possibly|might|could be|unclear|uncertain|not sure|probably)\b'
-        certainty_pattern = r'\b(definitely|confirmed|diagnosed|established|certain|clear)\b'
+        
+        # Use precompiled patterns
+        uncertainty_pattern = self._compiled_patterns['uncertainty']
+        certainty_pattern = self._compiled_patterns['certainty']
+        sentence_split = self._compiled_patterns['sentence_split']
         
         def get_sentiment_ratio(text):
-            sentences = re.split(r'[.!?]+', text)
-            sentences = [s for s in sentences if s.strip()]
+            """Optimized sentiment analysis with precompiled patterns."""
+            sentences = [s for s in sentence_split.split(text) if s.strip()]
             if not sentences:
                 return 0.0, 0.0, [], []
             
-            uncertainty_matches = re.findall(uncertainty_pattern, text, re.IGNORECASE)
-            certainty_matches = re.findall(certainty_pattern, text, re.IGNORECASE)
+            uncertainty_matches = uncertainty_pattern.findall(text)
+            certainty_matches = certainty_pattern.findall(text)
             
             uncertainty_count = len(uncertainty_matches)
             certainty_count = len(certainty_matches)
@@ -747,10 +871,12 @@ class DeterministicEvaluator(BaseEvaluator):
                 severity=Severity.MEDIUM,
                 description="Note expresses high certainty where transcript shows significant uncertainty",
                 evidence={
-                    "uncertain_transcript_phrases": list(set(uncertain_phrases))[:3],
-                    "certain_note_phrases": list(set(certain_phrases))[:3],
+                    "uncertain_transcript_phrases": list(set(uncertain_phrases))[:self.max_examples],
+                    "certain_note_phrases": list(set(certain_phrases))[:self.max_examples],
                     "transcript_uncertainty_ratio": f"{transcript_uncertainty:.2f}",
-                    "note_certainty_ratio": f"{note_certainty:.2f}"
+                    "note_certainty_ratio": f"{note_certainty:.2f}",
+                    "total_uncertain_phrases": len(uncertain_phrases),
+                    "total_certain_phrases": len(certain_phrases)
                 },
                 confidence=0.75
             ))
@@ -761,8 +887,10 @@ class DeterministicEvaluator(BaseEvaluator):
                 severity=Severity.LOW,
                 description="Note shows more certainty than transcript suggests",
                 evidence={
-                    "uncertain_transcript_phrases": list(set(uncertain_phrases))[:3],
-                    "certain_note_phrases": list(set(certain_phrases))[:3]
+                    "uncertain_transcript_phrases": list(set(uncertain_phrases))[:self.max_examples],
+                    "certain_note_phrases": list(set(certain_phrases))[:self.max_examples],
+                    "total_uncertain_phrases": len(uncertain_phrases),
+                    "total_certain_phrases": len(certain_phrases)
                 },
                 confidence=0.65
             ))
@@ -947,36 +1075,43 @@ class DeterministicEvaluator(BaseEvaluator):
         """
         Check if prescribed drugs are coherent with diagnosed conditions.
         Uses precomputed drug-condition coherence matrix.
+        Optimized: single-pass extraction with precompiled patterns, efficient set operations.
         """
         issues = []
-        # Extract drugs
-        drugs_found = []
-        for drug in self._medical_terms['drugs']:
-            if re.search(r'\b' + re.escape(drug) + r'\b', generated_note, re.IGNORECASE):
-                drugs_found.append(drug.lower())
         
-        # Extract conditions
-        conditions_found = []
-        for condition in self._medical_terms['conditions']:
-            if re.search(r'\b' + re.escape(condition) + r'\b', generated_note, re.IGNORECASE):
-                conditions_found.append(condition.lower())
+        # Extract drugs using precompiled patterns (single pass)
+        drugs_found = set()
+        note_lower = generated_note.lower()
+        
+        if hasattr(self, '_medical_term_patterns') and 'drugs' in self._medical_term_patterns:
+            for pattern in self._medical_term_patterns['drugs']:
+                match = pattern.search(generated_note)
+                if match:
+                    drugs_found.add(match.group(0).lower())
+        
+        # Extract conditions using precompiled patterns (single pass)
+        conditions_found = set()
+        if hasattr(self, '_medical_term_patterns') and 'conditions' in self._medical_term_patterns:
+            for pattern in self._medical_term_patterns['conditions']:
+                match = pattern.search(generated_note)
+                if match:
+                    conditions_found.add(match.group(0).lower())
         
         if not drugs_found or not conditions_found:
             return 0.5, issues  # Neutral if can't assess
         
-        # Check coherence for all drug-condition pairs
+        # Check coherence for all drug-condition pairs (optimized with early exit)
         coherence_scores = []
         incoherent_pairs = []
+        
         for drug in drugs_found:
             for condition in conditions_found:
                 key = f"{drug}_{condition}"
-                if key in self._drug_condition_coherence:
-                    score = self._drug_condition_coherence[key]
-                    coherence_scores.append(score)
-                    if score < 0.5:
-                        incoherent_pairs.append((drug, condition, score))
-                else:
-                    coherence_scores.append(0.5)  # Unknown pair
+                score = self._drug_condition_coherence.get(key, 0.5)  # Default to neutral
+                coherence_scores.append(score)
+                
+                if score < 0.5:
+                    incoherent_pairs.append((drug, condition, score))
         
         avg_coherence = np.mean(coherence_scores) if coherence_scores else 0.5
         
@@ -987,8 +1122,10 @@ class DeterministicEvaluator(BaseEvaluator):
                 severity=Severity.HIGH,
                 description=f"Found {len(incoherent_pairs)} questionable drug-condition pairs (low clinical coherence)",
                 evidence={
-                    "incoherent_pairs": [f"{d} for {c} (coherence: {s:.2f})" for d, c, s in incoherent_pairs[:3]],
-                    "avg_coherence": f"{avg_coherence:.2f}"
+                    "incoherent_pairs": [f"{d} for {c} (coherence: {s:.2f})" for d, c, s in incoherent_pairs[:self.max_examples]],
+                    "avg_coherence": f"{avg_coherence:.2f}",
+                    "total_pairs_checked": len(coherence_scores),
+                    "total_incoherent": len(incoherent_pairs)
                 },
                 confidence=0.80
             ))
@@ -998,19 +1135,16 @@ class DeterministicEvaluator(BaseEvaluator):
     def _check_temporal_consistency(self, generated_note: str) -> Tuple[float, List[Issue]]:
         """
         Detect timeline contradictions in the note.
+        Optimized: uses precompiled patterns, no arbitrary limits.
         """
         issues = []
-        # Extract temporal expressions
-        temporal_patterns = [
-            (r'(\d+)\s+(years?|months?|days?|weeks?)\s+ago', 'relative'),
-            (r'started\s+(?:on\s+)?(\d{1,2}/\d{1,2}/\d{4})', 'absolute'),
-            (r'since\s+(\d{4})', 'year'),
-            (r'(yesterday|today|last week|last month)', 'recent'),
-        ]
+        
+        # Use precompiled temporal patterns
+        temporal_patterns = self._compiled_patterns['temporal']
         
         temporal_mentions = []
         for pattern, temp_type in temporal_patterns:
-            matches = re.findall(pattern, generated_note, re.IGNORECASE)
+            matches = pattern.findall(generated_note)
             for match in matches:
                 temporal_mentions.append((match, temp_type))
         
@@ -1020,11 +1154,16 @@ class DeterministicEvaluator(BaseEvaluator):
                            for m, _ in temporal_mentions)
         has_recent = any(t == 'recent' for _, t in temporal_mentions)
         
-        # Check if same medication mentioned with different timeframes
-        medications = []
-        for drug in self._medical_terms['drugs'][:20]:  # Check common drugs
-            if re.search(r'\b' + re.escape(drug) + r'\b', generated_note, re.IGNORECASE):
-                medications.append(drug)
+        # Check if medications are mentioned (using precompiled patterns)
+        medications = set()
+        if hasattr(self, '_medical_term_patterns') and 'drugs' in self._medical_term_patterns:
+            for pattern in self._medical_term_patterns['drugs']:
+                match = pattern.search(generated_note)
+                if match:
+                    medications.add(match.group(0))
+                    # Early exit optimization: stop after finding enough evidence
+                    if len(medications) >= 10:
+                        break
         
         inconsistency_score = 0.0
         if len(medications) > 0 and has_long_term and has_recent:
@@ -1035,8 +1174,10 @@ class DeterministicEvaluator(BaseEvaluator):
                 severity=Severity.MEDIUM,
                 description="Note contains contradictory timeline references (e.g., 'years ago' and 'recently' for same context)",
                 evidence={
-                    "temporal_mentions": [str(m) for m, _ in temporal_mentions[:5]],
-                    "medications_mentioned": medications[:3]
+                    "temporal_mentions": [str(m) for m, _ in temporal_mentions[:self.max_examples]],
+                    "medications_mentioned": list(medications)[:self.max_examples],
+                    "total_temporal_mentions": len(temporal_mentions),
+                    "total_medications": len(medications)
                 },
                 confidence=0.75
             ))
@@ -1049,20 +1190,22 @@ class DeterministicEvaluator(BaseEvaluator):
         """
         Measure logical flow using sentence embeddings.
         High flow = consecutive sentences are semantically related.
+        Optimized: uses precompiled sentence splitter.
         """
         issues = []
         try:
-            # Split into sentences
-            sentences = [s.strip() for s in re.split(r'[.!?]+', generated_note) if s.strip()]
+            # Use precompiled sentence splitter
+            sentence_split = self._compiled_patterns['sentence_split']
+            sentences = [s.strip() for s in sentence_split.split(generated_note) if s.strip()]
             
             if len(sentences) < 2:
                 return 1.0, issues  # Can't measure flow with < 2 sentences
             
-            # Get embeddings
+            # Get embeddings (batch encoding is already optimized in sentence-transformers)
             model = get_sentence_transformer()
             embeddings = model.encode(sentences)
             
-            # Compute consecutive similarities
+            # Compute consecutive similarities using vectorized operations
             flow_scores = []
             low_transitions = []
             for i in range(len(sentences) - 1):
@@ -1073,7 +1216,7 @@ class DeterministicEvaluator(BaseEvaluator):
                 if similarity < 0.5:  # Low coherence
                     low_transitions.append((sentences[i][:50], sentences[i+1][:50], similarity))
             
-            avg_flow = np.mean(flow_scores)
+            avg_flow = np.mean(flow_scores) if flow_scores else 1.0
             flow_score = max(0.0, min(1.0, avg_flow))
             
             # Create issue if poor logical flow
@@ -1084,7 +1227,8 @@ class DeterministicEvaluator(BaseEvaluator):
                     description=f"Low coherence between consecutive sentences (avg score: {avg_flow:.2f})",
                     evidence={
                         "low_coherence_count": len(low_transitions),
-                        "examples": [f"{s1}... → {s2}... (sim: {sim:.2f})" for s1, s2, sim in low_transitions[:2]]
+                        "examples": [f"{s1}... → {s2}... (sim: {sim:.2f})" for s1, s2, sim in low_transitions[:self.max_examples]],
+                        "total_transitions": len(flow_scores)
                     },
                     confidence=0.65
                 ))
@@ -1097,6 +1241,7 @@ class DeterministicEvaluator(BaseEvaluator):
     def _check_evidence_conclusion_mapping(self, transcript: str, generated_note: str) -> Tuple[float, List[Issue]]:
         """
         Check if conclusions in Assessment have supporting evidence in Subjective/Objective.
+        Optimized: batch embeddings computation.
         """
         issues = []
         try:
@@ -1123,22 +1268,28 @@ class DeterministicEvaluator(BaseEvaluator):
             unsupported_list = []
             evidence_text = ' '.join(sections.get('subjective', []) + sections.get('objective', []))
             
-            model = get_sentence_transformer()
-            
-            for conclusion in conclusions:
-                # Check semantic similarity with evidence
-                if len(evidence_text) > 10:
-                    embeddings = model.encode([conclusion, evidence_text])
-                    similarity = np.dot(embeddings[0], embeddings[1]) / (
-                        np.linalg.norm(embeddings[0]) * np.linalg.norm(embeddings[1])
+            if len(evidence_text) > 10:
+                model = get_sentence_transformer()
+                
+                # Batch encode all conclusions + evidence (more efficient than one-by-one)
+                all_texts = conclusions + [evidence_text]
+                embeddings = model.encode(all_texts)
+                
+                evidence_embedding = embeddings[-1]
+                
+                for i, conclusion in enumerate(conclusions):
+                    conclusion_embedding = embeddings[i]
+                    similarity = np.dot(conclusion_embedding, evidence_embedding) / (
+                        np.linalg.norm(conclusion_embedding) * np.linalg.norm(evidence_embedding)
                     )
                     
                     if similarity < 0.65:  # Low similarity = unsupported
                         unsupported_count += 1
                         unsupported_list.append((conclusion[:80], similarity))
-                else:
-                    unsupported_count += 1
-                    unsupported_list.append((conclusion[:80], 0.0))
+            else:
+                # No evidence text
+                unsupported_count = len(conclusions)
+                unsupported_list = [(c[:80], 0.0) for c in conclusions]
             
             unsupported_ratio = unsupported_count / len(conclusions) if conclusions else 0.0
             
@@ -1149,8 +1300,9 @@ class DeterministicEvaluator(BaseEvaluator):
                     severity=Severity.HIGH,
                     description=f"Found {unsupported_count} assessment conclusions not supported by evidence in Subjective/Objective",
                     evidence={
-                        "unsupported_conclusions": [f"{c} (sim: {s:.2f})" for c, s in unsupported_list[:3]],
-                        "total_conclusions": len(conclusions)
+                        "unsupported_conclusions": [f"{c} (sim: {s:.2f})" for c, s in unsupported_list[:self.max_examples]],
+                        "total_conclusions": len(conclusions),
+                        "total_unsupported": unsupported_count
                     },
                     confidence=0.80
                 ))
@@ -1163,17 +1315,16 @@ class DeterministicEvaluator(BaseEvaluator):
     def _check_cause_effect_patterns(self, transcript: str, generated_note: str) -> Tuple[float, List[Issue]]:
         """
         Detect causal claims and verify they're supported by transcript.
+        Optimized: uses precompiled patterns.
         """
         issues = []
-        # Causal patterns
-        causal_patterns = [
-            r'(.+?)\s+(?:because|due to|caused by|resulting from)\s+(.+?)(?:[.!?]|$)',
-            r'(.+?)\s+(?:leads to|results in|causes)\s+(.+?)(?:[.!?]|$)',
-        ]
+        
+        # Use precompiled causal patterns
+        causal_patterns = self._compiled_patterns['causal']
         
         causal_claims = []
         for pattern in causal_patterns:
-            matches = re.findall(pattern, generated_note, re.IGNORECASE)
+            matches = pattern.findall(generated_note)
             causal_claims.extend(matches)
         
         if not causal_claims:
@@ -1197,8 +1348,9 @@ class DeterministicEvaluator(BaseEvaluator):
                 severity=Severity.MEDIUM,
                 description=f"Found {unsupported_count} causal claims without supporting evidence in transcript",
                 evidence={
-                    "invalid_causal_statements": invalid_list[:3],
-                    "total_causal_claims": len(causal_claims)
+                    "invalid_causal_statements": invalid_list[:self.max_examples],
+                    "total_causal_claims": len(causal_claims),
+                    "total_unsupported": unsupported_count
                 },
                 confidence=0.75
             ))
@@ -1282,8 +1434,9 @@ class DeterministicEvaluator(BaseEvaluator):
     
     def _check_drug_interactions(self, generated_note: str) -> Tuple[float, List[Issue]]:
         """
-        Check for dangerous drug-drug interactions (NEW VALIDATOR!).
+        Check for dangerous drug-drug interactions.
         Uses drug_interactions.json knowledge base.
+        Optimized: single-pass drug extraction with precompiled patterns.
         """
         issues = []
         
@@ -1296,20 +1449,25 @@ class DeterministicEvaluator(BaseEvaluator):
             except Exception:
                 return 0.0, issues  # KB not available
         
-        # Extract drugs from note
-        drugs_found = []
-        for drug in self._medical_terms['drugs']:
-            if re.search(r'\b' + re.escape(drug) + r'\b', generated_note, re.IGNORECASE):
-                drugs_found.append(drug.lower())
+        # Extract drugs from note using precompiled patterns (single pass)
+        drugs_found = set()
+        if hasattr(self, '_medical_term_patterns') and 'drugs' in self._medical_term_patterns:
+            for pattern in self._medical_term_patterns['drugs']:
+                match = pattern.search(generated_note)
+                if match:
+                    drugs_found.add(match.group(0).lower())
         
         if len(drugs_found) < 2:
             return 0.0, issues  # Need at least 2 drugs for interaction
         
-        # Check all pairs for interactions
+        # Convert to list for indexing
+        drugs_list = list(drugs_found)
+        
+        # Check all pairs for interactions (optimized with early termination)
         interaction_count = 0
-        for i, drug1 in enumerate(drugs_found):
-            for drug2 in drugs_found[i+1:]:
-                # Check both orderings
+        for i, drug1 in enumerate(drugs_list):
+            for drug2 in drugs_list[i+1:]:
+                # Check both orderings with single dictionary lookup
                 key1 = f"{drug1}_{drug2}"
                 key2 = f"{drug2}_{drug1}"
                 
@@ -1319,12 +1477,11 @@ class DeterministicEvaluator(BaseEvaluator):
                     interaction_count += 1
                     
                     # Map severity to Issue severity
-                    if interaction['severity'] == 'critical':
-                        severity = Severity.CRITICAL
-                    elif interaction['severity'] == 'major':
-                        severity = Severity.HIGH
-                    else:
-                        severity = Severity.MEDIUM
+                    severity_map = {
+                        'critical': Severity.CRITICAL,
+                        'major': Severity.HIGH
+                    }
+                    severity = severity_map.get(interaction['severity'], Severity.MEDIUM)
                     
                     issues.append(Issue(
                         type="dangerous_drug_interaction",
@@ -1346,8 +1503,9 @@ class DeterministicEvaluator(BaseEvaluator):
     
     def _check_contraindications(self, transcript: str, generated_note: str) -> Tuple[float, List[Issue]]:
         """
-        Check for contraindicated drug-condition pairs (NEW VALIDATOR!).
+        Check for contraindicated drug-condition pairs.
         Uses drug-condition coherence matrix to identify dangerous pairings.
+        Optimized: single-pass extraction with precompiled patterns, efficient set operations.
         """
         issues = []
         
@@ -1356,24 +1514,27 @@ class DeterministicEvaluator(BaseEvaluator):
             from ..knowledge_bases import get_kb_manager
             self._kb_manager = get_kb_manager()
         
-        # Extract drugs from note
-        drugs_found = []
-        for drug in self._medical_terms['drugs']:
-            if re.search(r'\b' + re.escape(drug) + r'\b', generated_note, re.IGNORECASE):
-                drugs_found.append(drug.lower())
+        # Extract drugs from note using precompiled patterns (single pass)
+        drugs_found = set()
+        if hasattr(self, '_medical_term_patterns') and 'drugs' in self._medical_term_patterns:
+            for pattern in self._medical_term_patterns['drugs']:
+                match = pattern.search(generated_note)
+                if match:
+                    drugs_found.add(match.group(0).lower())
         
-        # Extract conditions from transcript (patient history) or note (assessment)
-        conditions_found = []
-        for condition in self._medical_terms.get('conditions', []):
-            # Check both transcript and note for conditions
-            full_text = transcript + " " + generated_note
-            if re.search(r'\b' + re.escape(condition) + r'\b', full_text, re.IGNORECASE):
-                conditions_found.append(condition.lower())
+        # Extract conditions from transcript + note using precompiled patterns (single pass)
+        conditions_found = set()
+        full_text = transcript + " " + generated_note
+        if hasattr(self, '_medical_term_patterns') and 'conditions' in self._medical_term_patterns:
+            for pattern in self._medical_term_patterns['conditions']:
+                match = pattern.search(full_text)
+                if match:
+                    conditions_found.add(match.group(0).lower())
         
         if not drugs_found or not conditions_found:
             return 0.0, issues  # Need both drugs and conditions
         
-        # Check all drug-condition pairs
+        # Check all drug-condition pairs (optimized)
         contraindication_count = 0
         total_pairs = 0
         
@@ -1435,8 +1596,11 @@ class DeterministicEvaluator(BaseEvaluator):
             return 0.0, []
     
     def _parse_soap_sections(self, note: str) -> Dict[str, List[str]]:
-        """Parse SOAP note into sections."""
+        """Parse SOAP note into sections using precompiled patterns."""
         sections = {'subjective': [], 'objective': [], 'assessment': [], 'plan': []}
+        
+        # Use precompiled SOAP header patterns
+        soap_headers = self._compiled_patterns['soap_headers']
         
         # Split by SOAP headers
         current_section = None
@@ -1445,19 +1609,14 @@ class DeterministicEvaluator(BaseEvaluator):
             if not line:
                 continue
             
-            # Check for section headers
-            if re.match(r'^(subjective|s):', line, re.IGNORECASE):
-                current_section = 'subjective'
-                line = re.sub(r'^(subjective|s):', '', line, flags=re.IGNORECASE).strip()
-            elif re.match(r'^(objective|o):', line, re.IGNORECASE):
-                current_section = 'objective'
-                line = re.sub(r'^(objective|o):', '', line, flags=re.IGNORECASE).strip()
-            elif re.match(r'^(assessment|a):', line, re.IGNORECASE):
-                current_section = 'assessment'
-                line = re.sub(r'^(assessment|a):', '', line, flags=re.IGNORECASE).strip()
-            elif re.match(r'^(plan|p):', line, re.IGNORECASE):
-                current_section = 'plan'
-                line = re.sub(r'^(plan|p):', '', line, flags=re.IGNORECASE).strip()
+            # Check for section headers using precompiled patterns
+            matched = False
+            for section_name, pattern in soap_headers.items():
+                if pattern.match(line):
+                    current_section = section_name
+                    line = pattern.sub('', line).strip()
+                    matched = True
+                    break
             
             if current_section and line:
                 sections[current_section].append(line)

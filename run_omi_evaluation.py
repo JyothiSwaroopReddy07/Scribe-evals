@@ -48,7 +48,7 @@ def main():
     notes = loader.load_omi_health_dataset(num_samples=num_samples)
     
     if not notes:
-        print("❌ Failed to load OMI Health dataset")
+        print(" Failed to load OMI Health dataset")
         print("   Attempting to use synthetic data for testing...")
         notes = loader.load_synthetic_dataset(num_samples=10)
     
