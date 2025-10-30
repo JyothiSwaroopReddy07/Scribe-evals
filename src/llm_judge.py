@@ -2,8 +2,11 @@
 
 import os
 import json
+import logging
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI
@@ -77,7 +80,7 @@ class LLMJudge:
             elif self.provider == "anthropic":
                 return self._call_anthropic(system_prompt, user_prompt)
         except Exception as e:
-            print(f"Error calling LLM: {e}")
+            logger.error(f"Error calling LLM: {e}", exc_info=True)
             # Return empty response on error
             return LLMResponse(
                 content="",
@@ -157,7 +160,7 @@ class LLMJudge:
             
             return json.loads(content)
         except Exception as e:
-            print(f"Error parsing JSON response: {e}")
+            logger.error(f"Error parsing JSON response: {e}", exc_info=True)
             return {}
 
 
