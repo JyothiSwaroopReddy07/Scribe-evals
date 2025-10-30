@@ -515,6 +515,7 @@ class EnhancedEvaluationPipeline:
                     "evaluations": {
                         name: result.to_dict()
                         for name, result in all_results[i].items()
+                        if not name.startswith('_') and hasattr(result, 'to_dict')
                     }
                 }
                 for i in range(len(notes))
@@ -580,7 +581,11 @@ class EnhancedEvaluationPipeline:
         all_confidences = []
         
         for results in all_results:
-            for result in results.values():
+            for name, result in results.items():
+                # Skip metadata fields (like _routing_decision)
+                if name.startswith('_') or not hasattr(result, 'score'):
+                    continue
+                    
                 all_scores.append(result.score)
                 if "confidence" in result.metrics:
                     all_confidences.append(result.metrics["confidence"])
@@ -606,7 +611,11 @@ class EnhancedEvaluationPipeline:
         # Issue analysis
         all_issues_combined = []
         for results in all_results:
-            for result in results.values():
+            for name, result in results.items():
+                # Skip metadata fields (like _routing_decision)
+                if name.startswith('_') or not hasattr(result, 'issues'):
+                    continue
+                    
                 all_issues_combined.extend(result.issues)
         
         if all_issues_combined:
@@ -658,7 +667,11 @@ class EnhancedEvaluationPipeline:
         count = 0
         for results in all_results:
             has_critical = False
-            for result in results.values():
+            for name, result in results.items():
+                # Skip metadata fields (like _routing_decision)
+                if name.startswith('_') or not hasattr(result, 'issues'):
+                    continue
+                    
                 if any(issue.severity == Severity.CRITICAL for issue in result.issues):
                     has_critical = True
                     break
@@ -700,6 +713,7 @@ class EnhancedEvaluationPipeline:
                     "evaluations": {
                         name: result.to_dict()
                         for name, result in all_results[i].items()
+                        if not name.startswith('_') and hasattr(result, 'to_dict')
                     }
                 }
                 for i in range(len(notes))

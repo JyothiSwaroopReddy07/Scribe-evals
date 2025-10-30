@@ -129,10 +129,9 @@ class NLIContradictionDetector:
         if not section1_sentences or not section2_sentences:
             return contradictions
         
-        # Limit comparisons to avoid slowness
-        # Take first 5 sentences from each section
-        section1_subset = section1_sentences[:5]
-        section2_subset = section2_sentences[:5]
+
+        section1_subset = section1_sentences[:]
+        section2_subset = section2_sentences[:]
         
         comparison_count = 0
         

@@ -34,7 +34,6 @@ data/processed/
 *.json
 
 # Results
-results/
 outputs/
 cache/
 

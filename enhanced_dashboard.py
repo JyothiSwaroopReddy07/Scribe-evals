@@ -51,6 +51,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 
+@st.cache_data
 def load_results(results_file: str) -> Dict[str, Any]:
     """Load evaluation results from JSON file."""
     with open(results_file, 'r') as f:
@@ -236,6 +237,83 @@ def create_issue_severity_trend(results_data: List[Dict]) -> go.Figure:
     return fig
 
 
+def create_issues_by_evaluator_chart(results_data: List[Dict]) -> go.Figure:
+    """Create chart showing issues by evaluator type (Deterministic vs LLM)."""
+    evaluator_issues = {}
+    
+    for result in results_data:
+        for eval_name, eval_result in result['evaluations'].items():
+            if eval_name not in evaluator_issues:
+                evaluator_issues[eval_name] = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'info': 0}
+            
+            for issue in eval_result.get('issues', []):
+                severity = issue['severity']
+                if severity in evaluator_issues[eval_name]:
+                    evaluator_issues[eval_name][severity] += 1
+    
+    if not evaluator_issues:
+        return go.Figure()
+    
+    fig = go.Figure()
+    
+    colors = {
+        'critical': '#d62728',
+        'high': '#ff7f0e',
+        'medium': '#ffbb00',
+        'low': '#2ca02c',
+        'info': '#1f77b4'
+    }
+    
+    evaluators = list(evaluator_issues.keys())
+    
+    for severity in ['critical', 'high', 'medium', 'low', 'info']:
+        values = [evaluator_issues[eval].get(severity, 0) for eval in evaluators]
+        fig.add_trace(go.Bar(
+            name=severity.capitalize(),
+            x=evaluators,
+            y=values,
+            marker_color=colors[severity]
+        ))
+    
+    fig.update_layout(
+        title="Issues by Evaluator Type",
+        xaxis_title="Evaluator",
+        yaxis_title="Number of Issues",
+        barmode='stack',
+        height=400,
+        xaxis={'tickangle': -45}
+    )
+    
+    return fig
+
+
+def extract_all_issues(results_data: List[Dict]) -> pd.DataFrame:
+    """Extract all issues into a searchable DataFrame."""
+    all_issues = []
+    
+    for result in results_data:
+        note_id = result['note_id']
+        
+        for eval_name, eval_result in result['evaluations'].items():
+            # Categorize evaluator type
+            eval_type = "Deterministic" if "Deterministic" in eval_name else "LLM"
+            
+            for issue in eval_result.get('issues', []):
+                all_issues.append({
+                    'note_id': note_id,
+                    'evaluator': eval_name,
+                    'evaluator_type': eval_type,
+                    'severity': issue['severity'],
+                    'type': issue['type'],
+                    'description': issue['description'],
+                    'location': issue.get('location', 'N/A'),
+                    'confidence': issue.get('confidence', 'N/A'),
+                    'evidence': str(issue.get('evidence', ''))[:100] + '...' if issue.get('evidence') else 'N/A'
+                })
+    
+    return pd.DataFrame(all_issues)
+
+
 def create_evaluator_performance_heatmap(summary: Dict[str, Any]) -> go.Figure:
     """Create heatmap of evaluator performance metrics."""
     if 'evaluators' not in summary:
@@ -386,9 +464,50 @@ def display_alerts(summary: Dict[str, Any], results_data: List[Dict]):
         st.success("No critical alerts detected")
 
 
-def display_detailed_note_analysis(result: Dict):
+def display_detailed_note_analysis(result: Dict, note_data: Dict = None):
     """Display enhanced detailed view of a single note evaluation."""
     st.subheader(f"Note: {result['note_id']}")
+    
+    # Display the generated note content
+    if note_data:
+        st.write("### 📄 Generated Note Content")
+        
+        with st.expander("View Full Note", expanded=True):
+            # Display in a nice formatted box
+            st.text_area(
+                "Generated SOAP Note",
+                value=note_data.get('generated_note', 'Not available'),
+                height=300,
+                disabled=True,
+                key=f"note_content_{result['note_id']}"
+            )
+        
+        # Also show transcript and reference if available
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if note_data.get('transcript'):
+                with st.expander("📝 Original Transcript"):
+                    st.text_area(
+                        "Patient-Doctor Conversation",
+                        value=note_data['transcript'],
+                        height=250,
+                        disabled=True,
+                        key=f"transcript_{result['note_id']}"
+                    )
+        
+        with col2:
+            if note_data.get('reference_note'):
+                with st.expander("✅ Reference Note (Gold Standard)"):
+                    st.text_area(
+                        "Reference SOAP Note",
+                        value=note_data['reference_note'],
+                        height=250,
+                        disabled=True,
+                        key=f"reference_{result['note_id']}"
+                    )
+        
+        st.markdown("---")
     
     # Overall scores with confidence
     st.write("### Overall Scores & Confidence")
@@ -457,41 +576,84 @@ def display_detailed_note_analysis(result: Dict):
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # Issues breakdown
+    # Issues breakdown - separated by evaluator type
     st.write("### Issues Found")
     
+    # Separate deterministic and LLM evaluators
+    deterministic_evals = {}
+    llm_evals = {}
+    
     for eval_name, eval_result in result['evaluations'].items():
-        if eval_result['issues']:
-            with st.expander(f"{eval_name} ({len(eval_result['issues'])} issues)", expanded=False):
-                for issue in eval_result['issues']:
-                    severity_icons = {
-                        'critical': '🔴',
-                        'high': '🟠',
-                        'medium': '🟡',
-                        'low': '🟢',
-                        'info': '🔵'
-                    }
-                    icon = severity_icons.get(issue['severity'], '⚪')
-                    
-                    col1, col2 = st.columns([3, 1])
-                    
-                    with col1:
+        if 'Deterministic' in eval_name:
+            deterministic_evals[eval_name] = eval_result
+        else:
+            llm_evals[eval_name] = eval_result
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 📊 Deterministic Metrics Issues")
+        for eval_name, eval_result in deterministic_evals.items():
+            if eval_result['issues']:
+                with st.expander(f"{eval_name} ({len(eval_result['issues'])} issues)", expanded=False):
+                    for issue_idx, issue in enumerate(eval_result['issues']):
+                        severity_icons = {
+                            'critical': '🔴',
+                            'high': '🟠',
+                            'medium': '🟡',
+                            'low': '🟢',
+                            'info': '🔵'
+                        }
+                        icon = severity_icons.get(issue['severity'], '⚪')
+                        
                         st.markdown(f"{icon} **{issue['type']}** ({issue['severity']})")
                         st.write(f"**Description:** {issue['description']}")
                         if issue.get('location'):
                             st.write(f"**Location:** {issue['location']}")
-                    
-                    with col2:
-                        conf = issue.get('confidence', 0)
-                        st.metric("Confidence", f"{conf:.2f}")
-                    
-                    if issue.get('evidence'):
-                        with st.expander("Evidence Details"):
-                            st.json(issue['evidence'])
-                    
-                    st.divider()
-        else:
-            st.success(f"{eval_name}: No issues found")
+                        
+                        conf = issue.get('confidence', 'N/A')
+                        if conf != 'N/A':
+                            st.write(f"**Confidence:** {conf:.2f}")
+                        
+                        if issue.get('evidence'):
+                            with st.expander("Evidence Details"):
+                                st.json(issue['evidence'])
+                        
+                        st.divider()
+            else:
+                st.success(f"{eval_name}: No issues found")
+    
+    with col2:
+        st.markdown("#### 🤖 LLM Evaluator Issues")
+        for eval_name, eval_result in llm_evals.items():
+            if eval_result['issues']:
+                with st.expander(f"{eval_name} ({len(eval_result['issues'])} issues)", expanded=False):
+                    for issue_idx, issue in enumerate(eval_result['issues']):
+                        severity_icons = {
+                            'critical': '🔴',
+                            'high': '🟠',
+                            'medium': '🟡',
+                            'low': '🟢',
+                            'info': '🔵'
+                        }
+                        icon = severity_icons.get(issue['severity'], '⚪')
+                        
+                        st.markdown(f"{icon} **{issue['type']}** ({issue['severity']})")
+                        st.write(f"**Description:** {issue['description']}")
+                        if issue.get('location'):
+                            st.write(f"**Location:** {issue['location']}")
+                        
+                        conf = issue.get('confidence', 'N/A')
+                        if conf != 'N/A':
+                            st.write(f"**Confidence:** {conf:.2f}")
+                        
+                        if issue.get('evidence'):
+                            with st.expander("Evidence Details"):
+                                st.json(issue['evidence'])
+                        
+                        st.divider()
+            else:
+                st.success(f"{eval_name}: No issues found")
     
     # Detailed metrics
     st.write("### Detailed Metrics")
@@ -541,22 +703,15 @@ def main():
     selected_file = st.sidebar.selectbox(
         "Select Evaluation Results",
         result_files,
-        format_func=lambda x: x.name
+        format_func=lambda x: x.name,
+        key='file_selector'
     )
     
     if not selected_file:
         return
     
-    # Auto-refresh option
-    auto_refresh = st.sidebar.checkbox("Auto-refresh (every 30s)", value=False)
-    if auto_refresh:
-        st.sidebar.info("Dashboard will refresh every 30 seconds")
-        import time
-        time.sleep(30)
-        st.rerun()
-    
-    # Load results
-    results = load_results(selected_file)
+    # Load results (convert Path to string for caching)
+    results = load_results(str(selected_file))
     
     # Sidebar info
     st.sidebar.header("Evaluation Info")
@@ -624,9 +779,10 @@ def main():
     # Main visualizations
     st.header("Detailed Analysis")
     
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "Confidence Analysis", 
         "Issue Analysis", 
+        "All Issues Explorer",
         "Evaluator Performance",
         "Score Distribution",
         "Uncertainty Analysis"
@@ -656,13 +812,24 @@ def main():
     with tab2:
         st.subheader("Issue Analysis")
         
-        fig = create_issue_severity_trend(results['results'])
-        st.plotly_chart(fig, use_container_width=True)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig = create_issue_severity_trend(results['results'])
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            fig = create_issues_by_evaluator_chart(results['results'])
+            st.plotly_chart(fig, use_container_width=True)
         
         # Issue breakdown table
         if 'issue_analysis' in summary:
             st.write("### Issue Breakdown")
             
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**By Severity**")
             issue_data = []
             for severity, count in summary['issue_analysis'].get('by_severity', {}).items():
                 issue_data.append({'Severity': severity.capitalize(), 'Count': count})
@@ -678,8 +845,139 @@ def main():
                                'Low': '#2ca02c'
                            })
                 st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                st.write("**By Type**")
+                type_data = []
+                for issue_type, count in summary['issue_analysis'].get('by_type', {}).items():
+                    type_data.append({'Type': issue_type, 'Count': count})
+                
+                type_df = pd.DataFrame(type_data).sort_values('Count', ascending=False).head(10)
+                if not type_df.empty:
+                    fig = px.bar(type_df, x='Count', y='Type', orientation='h',
+                               title='Top 10 Issue Types')
+                st.plotly_chart(fig, use_container_width=True)
     
     with tab3:
+        st.subheader("🔍 All Issues Explorer")
+        st.write("Search and filter all issues from both Deterministic and LLM evaluators")
+        
+        # Extract all issues
+        issues_df = extract_all_issues(results['results'])
+        
+        if not issues_df.empty:
+            # Get unique values and sort them for consistency
+            eval_types = sorted(issues_df['evaluator_type'].unique().tolist())
+            evaluators = sorted(issues_df['evaluator'].unique().tolist())
+            
+            # Filters
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                severity_filter = st.multiselect(
+                    "Severity",
+                    options=['critical', 'high', 'medium', 'low', 'info'],
+                    default=['critical', 'high'],
+                    key='severity_filter_multiselect'
+                )
+            
+            with col2:
+                eval_type_filter = st.multiselect(
+                    "Evaluator Type",
+                    options=eval_types,
+                    default=eval_types,
+                    key='eval_type_filter_multiselect'
+                )
+            
+            with col3:
+                evaluator_filter = st.multiselect(
+                    "Specific Evaluator",
+                    options=evaluators,
+                    default=evaluators,
+                    key='evaluator_filter_multiselect'
+                )
+            
+            with col4:
+                search_term = st.text_input("Search in description", "", key='search_term_input')
+            
+            # Apply filters
+            filtered_df = issues_df[
+                (issues_df['severity'].isin(severity_filter)) &
+                (issues_df['evaluator_type'].isin(eval_type_filter)) &
+                (issues_df['evaluator'].isin(evaluator_filter))
+            ]
+            
+            if search_term:
+                filtered_df = filtered_df[
+                    filtered_df['description'].str.contains(search_term, case=False, na=False)
+                ]
+            
+            # Display statistics
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Issues", len(filtered_df))
+            with col2:
+                critical_count = len(filtered_df[filtered_df['severity'] == 'critical'])
+                st.metric("Critical", critical_count)
+            with col3:
+                deterministic_count = len(filtered_df[filtered_df['evaluator_type'] == 'Deterministic'])
+                st.metric("From Deterministic", deterministic_count)
+            with col4:
+                llm_count = len(filtered_df[filtered_df['evaluator_type'] == 'LLM'])
+                st.metric("From LLM", llm_count)
+            
+            st.write(f"### Showing {len(filtered_df)} issues")
+            
+            # Color code severity
+            def highlight_severity(row):
+                colors = {
+                    'critical': 'background-color: #ffcdd2',
+                    'high': 'background-color: #ffe0b2',
+                    'medium': 'background-color: #fff9c4',
+                    'low': 'background-color: #c8e6c9',
+                    'info': 'background-color: #bbdefb'
+                }
+                return [colors.get(row['severity'], '')] * len(row)
+            
+            # Display table with styling
+            display_df = filtered_df[['note_id', 'evaluator', 'evaluator_type', 'severity', 
+                                      'type', 'description', 'location', 'confidence']]
+            
+            st.dataframe(
+                display_df.style.apply(highlight_severity, axis=1),
+                use_container_width=True,
+                height=400
+            )
+            
+            # Download filtered issues
+            st.download_button(
+                label="📥 Download Filtered Issues (CSV)",
+                data=filtered_df.to_csv(index=False),
+                file_name=f"issues_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                key='download_filtered_issues'
+            )
+            
+            # Group by categories
+            st.write("### Issue Summary by Category")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Issues by Evaluator**")
+                eval_summary = filtered_df.groupby('evaluator').size().sort_values(ascending=False)
+                st.dataframe(eval_summary, use_container_width=True)
+            
+            with col2:
+                st.write("**Issues by Type**")
+                type_summary = filtered_df.groupby('type').size().sort_values(ascending=False).head(10)
+                st.dataframe(type_summary, use_container_width=True)
+        else:
+            st.success("No issues found in the evaluation results!")
+
+    
+    with tab4:
         st.subheader("Evaluator Performance")
         
         fig = create_evaluator_performance_heatmap(summary)
@@ -702,7 +1000,7 @@ def main():
         eval_df = pd.DataFrame(eval_data)
         st.dataframe(eval_df, use_container_width=True)
     
-    with tab4:
+    with tab5:
         st.subheader("Score Distribution")
         
         # Create box plots for all evaluators
@@ -724,7 +1022,7 @@ def main():
             fig.update_layout(height=500, xaxis={'tickangle': -45})
             st.plotly_chart(fig, use_container_width=True)
     
-    with tab5:
+    with tab6:
         st.subheader("Uncertainty Analysis")
         
         fig = create_uncertainty_analysis(results['results'])
@@ -734,14 +1032,97 @@ def main():
                 "Lower uncertainty indicates more reliable evaluations.")
     
     # Individual Note Analysis
-    st.header("Individual Note Analysis")
+    st.header("🔍 Individual Note Analysis")
     
     note_ids = [r['note_id'] for r in results['results']]
-    selected_note = st.selectbox("Select Note to Analyze", note_ids)
+    selected_note = st.selectbox("Select Note to Analyze", note_ids, key='note_selector')
     
     if selected_note:
         note_result = next(r for r in results['results'] if r['note_id'] == selected_note)
-        display_detailed_note_analysis(note_result)
+        
+        # Get the original note data if available
+        note_data = None
+        if 'notes' in results:
+            note_data = next((n for n in results['notes'] if n.get('id') == selected_note), None)
+        
+        # Create tabs for different views
+        analysis_tab1, analysis_tab2 = st.tabs(["📊 Evaluation Analysis", "📄 Document Comparison"])
+        
+        with analysis_tab1:
+            display_detailed_note_analysis(note_result, note_data)
+        
+        with analysis_tab2:
+            if note_data:
+                st.write("### Side-by-Side Document Comparison")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("#### 📝 Original Transcript")
+                    st.text_area(
+                        "Patient-Doctor Conversation",
+                        value=note_data.get('transcript', 'Not available'),
+                        height=500,
+                        disabled=True,
+                        key=f"compare_transcript_{selected_note}",
+                        label_visibility="collapsed"
+                    )
+                    word_count = len(note_data.get('transcript', '').split())
+                    st.caption(f"Words: {word_count}")
+                
+                with col2:
+                    st.markdown("#### 🤖 Generated Note")
+                    st.text_area(
+                        "AI Generated SOAP Note",
+                        value=note_data.get('generated_note', 'Not available'),
+                        height=500,
+                        disabled=True,
+                        key=f"compare_generated_{selected_note}",
+                        label_visibility="collapsed"
+                    )
+                    word_count = len(note_data.get('generated_note', '').split())
+                    st.caption(f"Words: {word_count}")
+                
+                with col3:
+                    if note_data.get('reference_note'):
+                        st.markdown("#### ✅ Reference Note")
+                        st.text_area(
+                            "Gold Standard SOAP Note",
+                            value=note_data['reference_note'],
+                            height=500,
+                            disabled=True,
+                            key=f"compare_reference_{selected_note}",
+                            label_visibility="collapsed"
+                        )
+                        word_count = len(note_data.get('reference_note', '').split())
+                        st.caption(f"Words: {word_count}")
+                    else:
+                        st.info("No reference note available")
+                
+                # Add length comparison metrics
+                st.write("### 📏 Length Comparison")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    transcript_len = len(note_data.get('transcript', ''))
+                    st.metric("Transcript Length", f"{transcript_len} chars")
+                
+                with col2:
+                    generated_len = len(note_data.get('generated_note', ''))
+                    st.metric("Generated Length", f"{generated_len} chars")
+                    if transcript_len > 0:
+                        ratio = generated_len / transcript_len
+                        st.caption(f"Ratio: {ratio:.2f}x transcript")
+                
+                with col3:
+                    if note_data.get('reference_note'):
+                        reference_len = len(note_data['reference_note'])
+                        st.metric("Reference Length", f"{reference_len} chars")
+                        if generated_len > 0:
+                            similarity = min(generated_len, reference_len) / max(generated_len, reference_len)
+                            st.caption(f"Length similarity: {similarity:.1%}")
+            else:
+                st.warning("Note content not available for comparison")
     
     # Download section
     st.header("Download Results")
@@ -753,7 +1134,8 @@ def main():
             label="Download JSON Results",
             data=json.dumps(results, indent=2),
             file_name=f"evaluation_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-            mime="application/json"
+            mime="application/json",
+            key='download_json_results'
         )
     
     with col2:
@@ -765,7 +1147,8 @@ def main():
                 label="Download CSV Summary",
                 data=csv_data,
                 file_name=f"evaluation_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
+                mime="text/csv",
+                key='download_csv_summary'
             )
 
 

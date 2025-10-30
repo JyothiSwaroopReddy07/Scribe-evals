@@ -43,7 +43,7 @@ def main():
     
     # Load ALL samples from the dataset for comprehensive evaluation
     # Set to None to load the entire dataset
-    num_samples = None  # Load entire SOAP dataset
+    num_samples = 100  # Load entire SOAP dataset
     
     notes = loader.load_omi_health_dataset(num_samples=num_samples)
     
