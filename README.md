@@ -1,4 +1,4 @@
-# 🏥 DeepScribe SOAP Note Evaluation Suite
+# Scribe SOAP Note Evaluation Suite
 
 > **Enterprise-grade evaluation framework for AI-generated clinical SOAP notes with intelligent routing, comprehensive medical knowledge bases, and production-ready reliability.**
 
@@ -8,7 +8,7 @@
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
 1. [System Overview](#-system-overview)
 2. [Architecture Diagrams](#-architecture-diagrams)
@@ -23,7 +23,7 @@
 
 ---
 
-## 🎯 System Overview
+## System Overview
 
 ### What This System Does
 
@@ -47,7 +47,7 @@ Evaluates AI-generated clinical SOAP (Subjective, Objective, Assessment, Plan) n
 
 ---
 
-## 🏗️ Architecture Diagrams
+## Architecture Diagrams
 
 ### High-Level System Architecture
 
@@ -463,7 +463,7 @@ Evaluates AI-generated clinical SOAP (Subjective, Objective, Assessment, Plan) n
 
 ---
 
-## 🔧 Core Components
+## Core Components
 
 ### 1. Enhanced Pipeline (`src/enhanced_pipeline.py` - 829 lines)
 
@@ -1186,16 +1186,6 @@ python test_deterministic_findings.py
 
 ---
 
-## 🛠️ Development
-
-### Code Quality Standards
-
-✅ **All imports organized at top** (no functional-level imports for standard library)  
-✅ **Type hints** on all public functions  
-✅ **Google-style docstrings**  
-✅ **Comprehensive error handling** with logging  
-✅ **Production-ready** code (retry, fallback, monitoring)
-
 ### Import Organization
 
 ```python
@@ -1294,7 +1284,7 @@ python scripts/build_knowledge_bases.py
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -1355,7 +1345,7 @@ config = EnhancedPipelineConfig(
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
 ### Knowledge Base Sources
 
@@ -1375,7 +1365,7 @@ config = EnhancedPipelineConfig(
 
 ---
 
-## 🤝 Contributing
+##  Contributing
 
 1. Fork the repository
 2. Create feature branch (`git checkout -b feature/amazing-feature`)
@@ -1388,21 +1378,14 @@ config = EnhancedPipelineConfig(
 
 ---
 
-## 📄 License
+## License
 
 MIT License - see LICENSE file for details
 
 ---
 
-## 📞 Support
 
-- **Issues**: https://github.com/your-org/deepscribe-evals/issues
-- **Discussions**: https://github.com/your-org/deepscribe-evals/discussions
-- **Email**: support@yourorg.com
-
----
-
-## 🎯 Quick Reference
+##  Quick Reference
 
 ### Most Common Commands
 
@@ -1437,8 +1420,8 @@ black src/ && ruff src/ && pytest
 
 **Last Updated**: 2025-10-28 
 **Version**: 2.0  
-**Status**: ✅ Production-Ready  
-**OpenAI API**: ✅ Verified Working  
+**Status**: Production-Ready  
+**OpenAI API**: Verified Working  
 **Cost Savings**: 30-50% with 98-99% accuracy
 
 ---

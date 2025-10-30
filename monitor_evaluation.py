@@ -14,11 +14,11 @@ def monitor_evaluation():
     # Find the latest full_evaluation log
     log_files = list(results_dir.glob("full_evaluation_*.log"))
     if not log_files:
-        print("❌ No evaluation log files found")
+        print(" No evaluation log files found")
         return
     
     latest_log = max(log_files, key=lambda p: p.stat().st_mtime)
-    print(f"📊 Monitoring: {latest_log.name}")
+    print(f" Monitoring: {latest_log.name}")
     print("="*80)
     print()
     
@@ -63,29 +63,29 @@ def monitor_evaluation():
                 # Clear screen and show status
                 print("\033[2J\033[H")  # Clear screen
                 print("="*80)
-                print(f"🏥 DeepScribe Evaluation Suite - Real-Time Monitor")
-                print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f" DeepScribe Evaluation Suite - Real-Time Monitor")
+                print(f" {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 print("="*80)
                 print()
                 
-                print(f"📊 Progress: {processed_notes}/{total_notes} notes ({progress_pct:.1f}%)")
+                print(f" Progress: {processed_notes}/{total_notes} notes ({progress_pct:.1f}%)")
                 
                 # Progress bar
                 bar_length = 50
                 filled = int(bar_length * progress_pct / 100)
-                bar = "█" * filled + "░" * (bar_length - filled)
+                bar = "" * filled + "░" * (bar_length - filled)
                 print(f"[{bar}] {progress_pct:.1f}%")
                 print()
                 
-                print("💰 Intelligent Routing Statistics:")
-                print(f"   Auto-Rejected: {auto_rejected:>6} ({auto_rejected/processed_notes*100 if processed_notes > 0 else 0:>5.1f}%) - Skip LLM ✅")
-                print(f"   Auto-Accepted: {auto_accepted:>6} ({auto_accepted/processed_notes*100 if processed_notes > 0 else 0:>5.1f}%) - Skip LLM ✅")
-                print(f"   LLM Required:  {llm_required:>6} ({llm_required/processed_notes*100 if processed_notes > 0 else 0:>5.1f}%) - Deep Analysis 🔍")
+                print(" Intelligent Routing Statistics:")
+                print(f"   Auto-Rejected: {auto_rejected:>6} ({auto_rejected/processed_notes*100 if processed_notes > 0 else 0:>5.1f}%) - Skip LLM ")
+                print(f"   Auto-Accepted: {auto_accepted:>6} ({auto_accepted/processed_notes*100 if processed_notes > 0 else 0:>5.1f}%) - Skip LLM ")
+                print(f"   LLM Required:  {llm_required:>6} ({llm_required/processed_notes*100 if processed_notes > 0 else 0:>5.1f}%) - Deep Analysis ")
                 print()
                 
                 skipped = auto_rejected + auto_accepted
                 savings_pct = (skipped / processed_notes * 100) if processed_notes > 0 else 0
-                print(f"💵 Cost Savings: {savings_pct:.1f}% ({skipped} notes skip LLM)")
+                print(f" Cost Savings: {savings_pct:.1f}% ({skipped} notes skip LLM)")
                 print()
                 
                 # Time estimates
@@ -108,18 +108,18 @@ def monitor_evaluation():
                 
                 # Check if complete
                 if "EVALUATION COMPLETE" in content:
-                    print("\n✅ EVALUATION COMPLETE!")
+                    print("\n EVALUATION COMPLETE!")
                     break
                 
                 # Check for errors
                 if "EVALUATION FAILED" in content:
-                    print("\n❌ EVALUATION FAILED - Check log file for details")
+                    print("\n EVALUATION FAILED - Check log file for details")
                     break
             
             time.sleep(5)  # Update every 5 seconds
             
     except KeyboardInterrupt:
-        print("\n\n⏸️  Monitoring stopped (evaluation continues in background)")
+        print("\n\n  Monitoring stopped (evaluation continues in background)")
         print(f"   Log file: {latest_log}")
         print(f"   Progress: {processed_notes}/{total_notes} notes")
         print()
