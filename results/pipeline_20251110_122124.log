@@ -1,0 +1,152 @@
+2025-11-10 12:21:24,778 - src.enhanced_pipeline - INFO - Initializing DeterministicEvaluator...
+2025-11-10 12:21:24,784 - src.enhanced_pipeline - INFO - Initializing EnhancedHallucinationDetector...
+2025-11-10 12:21:24,796 - src.enhanced_pipeline - INFO - Initializing EnhancedCompletenessChecker...
+2025-11-10 12:21:24,807 - src.enhanced_pipeline - INFO - Initializing EnhancedClinicalAccuracyEvaluator...
+2025-11-10 12:21:24,822 - src.enhanced_pipeline - INFO - Initializing SemanticCoherenceEvaluator...
+2025-11-10 12:21:24,835 - src.enhanced_pipeline - INFO - Initializing ClinicalReasoningEvaluator...
+2025-11-10 12:21:24,846 - src.enhanced_pipeline - INFO - Initializing routing system (NO SAMPLING)...
+2025-11-10 12:21:24,846 - src.enhanced_pipeline - INFO - Routing system initialized successfully (safety-first approach)
+2025-11-10 12:21:24,847 - src.enhanced_pipeline - INFO - Initialized 6 evaluators
+2025-11-10 12:21:24,847 - src.enhanced_pipeline - INFO - Intelligent routing enabled in balanced mode
+2025-11-10 12:21:24,847 - src.enhanced_pipeline - INFO - Configuration: EnhancedPipelineConfig(enable_deterministic=True, enable_hallucination_detection=True, enable_completeness_check=True, enable_clinical_accuracy=True, enable_semantic_coherence=True, enable_clinical_reasoning=True, enable_intelligent_routing=True, routing_mode='balanced', use_ensemble=False, ensemble_models=['gpt-4o-mini', 'gpt-3.5-turbo'], llm_model='gpt-4o-mini', temperature=0.0, output_dir='results', save_intermediate=True, save_detailed_analysis=True, enable_caching=True, max_retries=3, timeout=60.0, max_workers=10, enable_monitoring=True, log_level='INFO')
+2025-11-10 12:21:24,847 - src.enhanced_pipeline - INFO - ================================================================================
+2025-11-10 12:21:24,848 - src.enhanced_pipeline - INFO - Running Enhanced Evaluation Pipeline on 10 notes
+2025-11-10 12:21:24,848 - src.enhanced_pipeline - INFO - ================================================================================
+2025-11-10 12:21:24,848 - src.enhanced_pipeline - INFO - Starting PARALLEL batch evaluation of 10 notes with 10 workers
+2025-11-10 12:21:24,848 - src.enhanced_pipeline - INFO - Evaluating omi_0 with DeterministicMetrics
+2025-11-10 12:21:24,849 - src.enhanced_pipeline - INFO - Evaluating omi_1 with DeterministicMetrics
+2025-11-10 12:21:24,850 - src.enhanced_pipeline - INFO - Evaluating omi_2 with DeterministicMetrics
+2025-11-10 12:21:24,851 - src.enhanced_pipeline - INFO - Evaluating omi_3 with DeterministicMetrics
+2025-11-10 12:21:24,855 - src.enhanced_pipeline - INFO - Evaluating omi_4 with DeterministicMetrics
+2025-11-10 12:21:24,856 - src.enhanced_pipeline - INFO - Evaluating omi_5 with DeterministicMetrics
+2025-11-10 12:21:24,860 - src.enhanced_pipeline - INFO - Evaluating omi_6 with DeterministicMetrics
+2025-11-10 12:21:24,876 - src.enhanced_pipeline - INFO - Evaluating omi_7 with DeterministicMetrics
+2025-11-10 12:21:24,883 - src.enhanced_pipeline - INFO - Evaluating omi_8 with DeterministicMetrics
+2025-11-10 12:21:24,885 - src.enhanced_pipeline - INFO - Evaluating omi_9 with DeterministicMetrics
+2025-11-10 12:21:40,540 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_4 in 15.68s (score: 0.916, issues: 2)
+2025-11-10 12:21:40,541 - src.enhanced_pipeline - INFO - Routing decision for omi_4: llm_required - Needs LLM analysis (confidence=0.790)
+2025-11-10 12:21:40,541 - src.enhanced_pipeline - INFO - Evaluating omi_4 with EnhancedHallucinationDetector
+2025-11-10 12:21:44,037 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_0 in 19.19s (score: 0.855, issues: 4)
+2025-11-10 12:21:44,043 - src.enhanced_pipeline - INFO - Routing decision for omi_0: llm_required - Needs LLM analysis (confidence=0.637, clinical_risk=0.350, reasoning_risk=0.588)
+2025-11-10 12:21:44,043 - src.enhanced_pipeline - INFO - Evaluating omi_0 with EnhancedHallucinationDetector
+2025-11-10 12:21:51,587 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_4 in 11.05s (score: 0.900, issues: 1)
+2025-11-10 12:21:51,587 - src.enhanced_pipeline - INFO - Evaluating omi_4 with EnhancedCompletenessChecker
+2025-11-10 12:21:56,916 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_0 in 12.87s (score: 0.500, issues: 2)
+2025-11-10 12:21:56,916 - src.enhanced_pipeline - INFO - Evaluating omi_0 with EnhancedCompletenessChecker
+2025-11-10 12:22:04,128 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_3 in 39.28s (score: 0.881, issues: 3)
+2025-11-10 12:22:04,130 - src.enhanced_pipeline - INFO - Routing decision for omi_3: llm_required - Needs LLM analysis (confidence=0.703, reasoning_risk=0.542)
+2025-11-10 12:22:04,130 - src.enhanced_pipeline - INFO - Evaluating omi_3 with EnhancedHallucinationDetector
+2025-11-10 12:22:11,149 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_4 in 19.56s (score: 0.750, issues: 2)
+2025-11-10 12:22:11,149 - src.enhanced_pipeline - INFO - Evaluating omi_4 with EnhancedClinicalAccuracy
+2025-11-10 12:22:11,457 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_0 in 14.54s (score: 0.700, issues: 2)
+2025-11-10 12:22:11,457 - src.enhanced_pipeline - INFO - Evaluating omi_0 with EnhancedClinicalAccuracy
+2025-11-10 12:22:11,865 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_3 in 7.73s (score: 1.000, issues: 0)
+2025-11-10 12:22:11,865 - src.enhanced_pipeline - INFO - Evaluating omi_3 with EnhancedCompletenessChecker
+2025-11-10 12:22:16,883 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_0 in 5.43s (score: 1.000, issues: 0)
+2025-11-10 12:22:16,883 - src.enhanced_pipeline - INFO - Evaluating omi_0 with SemanticCoherence
+2025-11-10 12:22:20,467 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_4 in 9.32s (score: 1.000, issues: 0)
+2025-11-10 12:22:20,467 - src.enhanced_pipeline - INFO - Evaluating omi_4 with SemanticCoherence
+2025-11-10 12:22:26,904 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_0 in 10.02s (score: 0.900, issues: 0)
+2025-11-10 12:22:26,905 - src.enhanced_pipeline - INFO - Evaluating omi_0 with ClinicalReasoning
+2025-11-10 12:22:29,614 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_3 in 17.75s (score: 0.700, issues: 2)
+2025-11-10 12:22:29,614 - src.enhanced_pipeline - INFO - Evaluating omi_3 with EnhancedClinicalAccuracy
+2025-11-10 12:22:33,786 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_4 in 13.32s (score: 0.900, issues: 0)
+2025-11-10 12:22:33,787 - src.enhanced_pipeline - INFO - Evaluating omi_4 with ClinicalReasoning
+2025-11-10 12:22:38,405 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_3 in 8.79s (score: 1.000, issues: 0)
+2025-11-10 12:22:38,406 - src.enhanced_pipeline - INFO - Evaluating omi_3 with SemanticCoherence
+2025-11-10 12:22:38,812 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_0 in 11.91s (score: 0.850, issues: 2)
+2025-11-10 12:22:48,140 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_4 in 14.35s (score: 0.760, issues: 2)
+2025-11-10 12:22:52,314 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_3 in 13.91s (score: 0.850, issues: 1)
+2025-11-10 12:22:52,314 - src.enhanced_pipeline - INFO - Evaluating omi_3 with ClinicalReasoning
+2025-11-10 12:23:01,429 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_6 in 96.57s (score: 0.909, issues: 2)
+2025-11-10 12:23:01,429 - src.enhanced_pipeline - INFO - Routing decision for omi_6: llm_required - Needs LLM analysis (confidence=0.772)
+2025-11-10 12:23:01,429 - src.enhanced_pipeline - INFO - Evaluating omi_6 with EnhancedHallucinationDetector
+2025-11-10 12:23:04,189 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_3 in 11.87s (score: 0.650, issues: 2)
+2025-11-10 12:23:24,261 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_6 in 22.83s (score: 0.700, issues: 3)
+2025-11-10 12:23:24,263 - src.enhanced_pipeline - INFO - Evaluating omi_6 with EnhancedCompletenessChecker
+2025-11-10 12:23:40,586 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_6 in 16.32s (score: 0.700, issues: 3)
+2025-11-10 12:23:40,587 - src.enhanced_pipeline - INFO - Evaluating omi_6 with EnhancedClinicalAccuracy
+2025-11-10 12:23:54,377 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_6 in 13.79s (score: 1.000, issues: 0)
+2025-11-10 12:23:54,377 - src.enhanced_pipeline - INFO - Evaluating omi_6 with SemanticCoherence
+2025-11-10 12:24:04,311 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_6 in 9.93s (score: 1.000, issues: 0)
+2025-11-10 12:24:04,311 - src.enhanced_pipeline - INFO - Evaluating omi_6 with ClinicalReasoning
+2025-11-10 12:24:14,850 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_6 in 10.54s (score: 0.900, issues: 1)
+2025-11-10 12:24:23,915 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_1 in 179.07s (score: 0.689, issues: 5)
+2025-11-10 12:24:23,916 - src.enhanced_pipeline - INFO - Routing decision for omi_1: llm_required - Needs LLM analysis (confidence=0.597, score=0.689, hallucination_risk=0.793)
+2025-11-10 12:24:23,916 - src.enhanced_pipeline - INFO - Evaluating omi_1 with EnhancedHallucinationDetector
+2025-11-10 12:24:33,791 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_8 in 188.91s (score: 0.590, issues: 10)
+2025-11-10 12:24:33,792 - src.enhanced_pipeline - INFO - Routing decision for omi_8: llm_required - Needs LLM analysis (confidence=0.351, score=0.590, hallucination_risk=0.835, clinical_risk=0.500, reasoning_risk=0.611)
+2025-11-10 12:24:33,792 - src.enhanced_pipeline - INFO - Evaluating omi_8 with EnhancedHallucinationDetector
+2025-11-10 12:24:38,804 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_5 in 193.95s (score: 0.672, issues: 6)
+2025-11-10 12:24:38,805 - src.enhanced_pipeline - INFO - Routing decision for omi_5: llm_required - Needs LLM analysis (confidence=0.555, score=0.672, hallucination_risk=0.599, reasoning_risk=0.585)
+2025-11-10 12:24:38,805 - src.enhanced_pipeline - INFO - Evaluating omi_5 with EnhancedHallucinationDetector
+2025-11-10 12:24:43,610 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_1 in 19.69s (score: 0.500, issues: 2)
+2025-11-10 12:24:43,611 - src.enhanced_pipeline - INFO - Evaluating omi_1 with EnhancedCompletenessChecker
+2025-11-10 12:24:53,379 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_8 in 19.59s (score: 0.500, issues: 2)
+2025-11-10 12:24:53,379 - src.enhanced_pipeline - INFO - Evaluating omi_8 with EnhancedCompletenessChecker
+2025-11-10 12:24:53,492 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_2 in 208.64s (score: 0.651, issues: 9)
+2025-11-10 12:24:53,492 - src.enhanced_pipeline - INFO - Routing decision for omi_2: llm_required - Needs LLM analysis (confidence=0.502, score=0.651, hallucination_risk=0.749, clinical_risk=0.450)
+2025-11-10 12:24:53,492 - src.enhanced_pipeline - INFO - Evaluating omi_2 with EnhancedHallucinationDetector
+2025-11-10 12:24:53,799 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_5 in 14.99s (score: 0.800, issues: 1)
+2025-11-10 12:24:53,800 - src.enhanced_pipeline - INFO - Evaluating omi_5 with EnhancedCompletenessChecker
+2025-11-10 12:24:58,017 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_1 in 14.41s (score: 0.750, issues: 2)
+2025-11-10 12:24:58,018 - src.enhanced_pipeline - INFO - Evaluating omi_1 with EnhancedClinicalAccuracy
+2025-11-10 12:25:06,044 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_2 in 12.55s (score: 0.800, issues: 1)
+2025-11-10 12:25:06,044 - src.enhanced_pipeline - INFO - Evaluating omi_2 with EnhancedCompletenessChecker
+2025-11-10 12:25:06,242 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_5 in 12.44s (score: 0.800, issues: 2)
+2025-11-10 12:25:06,242 - src.enhanced_pipeline - INFO - Evaluating omi_5 with EnhancedClinicalAccuracy
+2025-11-10 12:25:10,783 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_1 in 12.77s (score: 0.800, issues: 1)
+2025-11-10 12:25:10,784 - src.enhanced_pipeline - INFO - Evaluating omi_1 with SemanticCoherence
+2025-11-10 12:25:12,646 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_8 in 19.27s (score: 0.600, issues: 4)
+2025-11-10 12:25:12,646 - src.enhanced_pipeline - INFO - Evaluating omi_8 with EnhancedClinicalAccuracy
+2025-11-10 12:25:15,085 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_7 in 230.21s (score: 0.638, issues: 7)
+2025-11-10 12:25:15,086 - src.enhanced_pipeline - INFO - Routing decision for omi_7: llm_required - Needs LLM analysis (confidence=0.470, score=0.638, hallucination_risk=0.879, reasoning_risk=0.559)
+2025-11-10 12:25:15,086 - src.enhanced_pipeline - INFO - Evaluating omi_7 with EnhancedHallucinationDetector
+2025-11-10 12:25:16,622 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_5 in 10.38s (score: 0.700, issues: 1)
+2025-11-10 12:25:16,623 - src.enhanced_pipeline - INFO - Evaluating omi_5 with SemanticCoherence
+2025-11-10 12:25:19,874 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_2 in 13.83s (score: 0.700, issues: 2)
+2025-11-10 12:25:19,874 - src.enhanced_pipeline - INFO - Evaluating omi_2 with EnhancedClinicalAccuracy
+2025-11-10 12:25:21,518 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_8 in 8.87s (score: 1.000, issues: 0)
+2025-11-10 12:25:21,518 - src.enhanced_pipeline - INFO - Evaluating omi_8 with SemanticCoherence
+2025-11-10 12:25:22,157 - src.enhanced_pipeline - INFO - Completed DeterministicMetrics for omi_9 in 237.27s (score: 0.687, issues: 7)
+2025-11-10 12:25:22,158 - src.enhanced_pipeline - INFO - Routing decision for omi_9: llm_required - Needs LLM analysis (confidence=0.550, score=0.687, hallucination_risk=0.567, reasoning_risk=0.569)
+2025-11-10 12:25:22,158 - src.enhanced_pipeline - INFO - Evaluating omi_9 with EnhancedHallucinationDetector
+2025-11-10 12:25:25,514 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_5 in 8.89s (score: 1.000, issues: 0)
+2025-11-10 12:25:25,515 - src.enhanced_pipeline - INFO - Evaluating omi_5 with ClinicalReasoning
+2025-11-10 12:25:29,772 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_1 in 18.99s (score: 0.550, issues: 3)
+2025-11-10 12:25:29,772 - src.enhanced_pipeline - INFO - Evaluating omi_1 with ClinicalReasoning
+2025-11-10 12:25:30,467 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_2 in 10.59s (score: 0.800, issues: 1)
+2025-11-10 12:25:30,467 - src.enhanced_pipeline - INFO - Evaluating omi_2 with SemanticCoherence
+2025-11-10 12:25:32,673 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_8 in 11.16s (score: 0.750, issues: 1)
+2025-11-10 12:25:32,674 - src.enhanced_pipeline - INFO - Evaluating omi_8 with ClinicalReasoning
+2025-11-10 12:25:36,313 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_7 in 21.23s (score: 0.700, issues: 2)
+2025-11-10 12:25:36,314 - src.enhanced_pipeline - INFO - Evaluating omi_7 with EnhancedCompletenessChecker
+2025-11-10 12:25:37,088 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_5 in 11.57s (score: 0.900, issues: 2)
+2025-11-10 12:25:38,675 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_2 in 8.21s (score: 0.900, issues: 0)
+2025-11-10 12:25:38,676 - src.enhanced_pipeline - INFO - Evaluating omi_2 with ClinicalReasoning
+2025-11-10 12:25:40,678 - src.enhanced_pipeline - INFO - Completed EnhancedHallucinationDetector for omi_9 in 18.52s (score: 0.500, issues: 3)
+2025-11-10 12:25:40,678 - src.enhanced_pipeline - INFO - Evaluating omi_9 with EnhancedCompletenessChecker
+2025-11-10 12:25:41,781 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_1 in 12.01s (score: 0.780, issues: 2)
+2025-11-10 12:25:43,462 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_8 in 10.79s (score: 0.880, issues: 2)
+2025-11-10 12:25:48,543 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_2 in 9.87s (score: 0.780, issues: 2)
+2025-11-10 12:25:53,960 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_7 in 17.65s (score: 0.750, issues: 3)
+2025-11-10 12:25:53,961 - src.enhanced_pipeline - INFO - Evaluating omi_7 with EnhancedClinicalAccuracy
+2025-11-10 12:26:01,234 - src.enhanced_pipeline - INFO - Completed EnhancedCompletenessChecker for omi_9 in 20.56s (score: 0.700, issues: 3)
+2025-11-10 12:26:01,234 - src.enhanced_pipeline - INFO - Evaluating omi_9 with EnhancedClinicalAccuracy
+2025-11-10 12:26:09,323 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_7 in 15.36s (score: 1.000, issues: 0)
+2025-11-10 12:26:09,323 - src.enhanced_pipeline - INFO - Evaluating omi_7 with SemanticCoherence
+2025-11-10 12:26:19,561 - src.enhanced_pipeline - INFO - Completed EnhancedClinicalAccuracy for omi_9 in 18.33s (score: 0.700, issues: 1)
+2025-11-10 12:26:19,561 - src.enhanced_pipeline - INFO - Evaluating omi_9 with SemanticCoherence
+2025-11-10 12:26:24,375 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_7 in 15.05s (score: 0.550, issues: 2)
+2025-11-10 12:26:24,376 - src.enhanced_pipeline - INFO - Evaluating omi_7 with ClinicalReasoning
+2025-11-10 12:26:34,209 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_7 in 9.83s (score: 0.900, issues: 1)
+2025-11-10 12:26:35,967 - src.enhanced_pipeline - INFO - Completed SemanticCoherence for omi_9 in 16.41s (score: 0.750, issues: 2)
+2025-11-10 12:26:35,967 - src.enhanced_pipeline - INFO - Evaluating omi_9 with ClinicalReasoning
+2025-11-10 12:26:45,916 - src.enhanced_pipeline - INFO - Completed ClinicalReasoning for omi_9 in 9.95s (score: 0.850, issues: 2)
+2025-11-10 12:26:45,938 - src.enhanced_pipeline - INFO - Completed batch evaluation
+2025-11-10 12:26:46,295 - src.enhanced_pipeline - INFO - CSV summary saved to results/enhanced_evaluation_results_20251110_122645.csv
+2025-11-10 12:26:46,297 - src.enhanced_pipeline - INFO - Results saved to results/enhanced_evaluation_results_20251110_122645.json
+2025-11-10 12:26:46,297 - src.enhanced_pipeline - INFO - ================================================================================
+2025-11-10 12:26:46,298 - src.enhanced_pipeline - INFO - Evaluation Complete in 321.45s!
+2025-11-10 12:26:46,298 - src.enhanced_pipeline - INFO - Results saved to: results/enhanced_evaluation_results_20251110_122645.json
+2025-11-10 12:26:46,299 - src.enhanced_pipeline - INFO - ================================================================================

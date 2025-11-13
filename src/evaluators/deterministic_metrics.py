@@ -79,12 +79,12 @@ class DeterministicEvaluator(BaseEvaluator):
     def _compile_patterns(self) -> Dict[str, Any]:
         """Compile all regex patterns once at initialization to avoid repeated compilation."""
         return {
-            # SOAP structure patterns
+            # SOAP structure patterns - matches both abbreviated (S:, O:, A:, P:) and full forms
             'soap_sections': {
-                'subjective': re.compile(r'\b(subjective|s:)\b', re.IGNORECASE),
-                'objective': re.compile(r'\b(objective|o:)\b', re.IGNORECASE),
-                'assessment': re.compile(r'\b(assessment|a:)\b', re.IGNORECASE),
-                'plan': re.compile(r'\b(plan|p:)\b', re.IGNORECASE)
+                'subjective': re.compile(r'(?:^|\n|\s)(subjective|s)\s*:', re.IGNORECASE),
+                'objective': re.compile(r'(?:^|\n|\s)(objective|o)\s*:', re.IGNORECASE),
+                'assessment': re.compile(r'(?:^|\n|\s)(assessment|a)\s*:', re.IGNORECASE),
+                'plan': re.compile(r'(?:^|\n|\s)(plan|p)\s*:', re.IGNORECASE)
             },
             
             # Medical entity patterns
@@ -147,12 +147,12 @@ class DeterministicEvaluator(BaseEvaluator):
             # Sentence splitter
             'sentence_split': re.compile(r'[.!?]+'),
             
-            # SOAP section headers
+            # SOAP section headers - for parsing (start of line, case-insensitive)
             'soap_headers': {
-                'subjective': re.compile(r'^(subjective|s):', re.IGNORECASE),
-                'objective': re.compile(r'^(objective|o):', re.IGNORECASE),
-                'assessment': re.compile(r'^(assessment|a):', re.IGNORECASE),
-                'plan': re.compile(r'^(plan|p):', re.IGNORECASE)
+                'subjective': re.compile(r'^\s*(subjective|s)\s*:', re.IGNORECASE),
+                'objective': re.compile(r'^\s*(objective|o)\s*:', re.IGNORECASE),
+                'assessment': re.compile(r'^\s*(assessment|a)\s*:', re.IGNORECASE),
+                'plan': re.compile(r'^\s*(plan|p)\s*:', re.IGNORECASE)
             }
         }
         
